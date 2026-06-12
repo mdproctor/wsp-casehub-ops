@@ -1,0 +1,9 @@
+branch: issue-1-infra-terraform-ansible-design
+project-sha: dd5b116146d3f71561524dec410f9017247f08b4
+date: 2026-06-12
+issue: 1
+issue-repo: casehubio/casehub-ops
+covers: 1
+flyway-next-v: none
+design-repo: project
+design-section-hashes: 
