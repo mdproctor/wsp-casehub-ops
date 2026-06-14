@@ -1,0 +1,9 @@
+branch: issue-2-deployment-agent-topology
+project-sha: 4e0ae3071082feea32746b309ea345110b3bcd89
+date: 2026-06-14
+issue: 2
+issue-repo: casehubio/casehub-ops
+covers: 2
+flyway-next-v: none
+design-repo: project
+design-section-hashes: 
