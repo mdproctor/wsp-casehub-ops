@@ -1,0 +1,9 @@
+branch: issue-5-infra-review-findings
+project-sha: ed721b8bcac87e2363b125bb2c551774e1e15376
+date: 2026-06-14
+issue: 5
+issue-repo: casehubio/casehub-ops
+covers: 5
+flyway-next-v: none
+design-repo: project
+design-section-hashes: 
