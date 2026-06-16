@@ -2,7 +2,7 @@
 
 **Issue:** casehubio/casehub-ops#2
 **Date:** 2026-06-16
-**Status:** Approved (revision 3 — post-review)
+**Status:** Approved (revision 4 — post-review)
 
 ## Problem
 
@@ -148,12 +148,13 @@ MessageType values: `QUERY`, `COMMAND`, `RESPONSE`, `STATUS`, `DECLINE`, `HANDOF
 
 NodeType strings: `"agent"`, `"channel"`, `"case_type"`, `"trust_policy"`.
 
-**allowedTypes/deniedTypes YAML mapping:** `ChannelCreateRequest` uses `Set<MessageType>` where `null` means "open" (unrestricted) and `Set.of()` means "nothing permitted." This distinction is semantically important. The YAML mapping:
-- Field absent → `null` → open (all types permitted)
-- `[]` → `Set.of()` → nothing permitted (explicit restriction)
+**allowedTypes/deniedTypes YAML mapping:** `ChannelCreateRequest` uses `Set<MessageType>` where `null` means "open" (unrestricted). The YAML mapping:
+- Field absent or `[]` → `null` → open (all types permitted)
 - `[COMMAND, RESPONSE]` → `Set.of(COMMAND, RESPONSE)` → only these types
 
-`ChannelNodeSpec` uses `Set<MessageType>` (nullable) to preserve this contract. Jackson handles absent → null and `[]` → empty Set naturally.
+`ChannelNodeSpec` uses `Set<MessageType>` (nullable). Jackson absent → null, `[]` → empty Set → mapped to null by the compiler.
+
+**Platform limitation:** `ChannelService.setTypeConstraints()` normalises `null` → `Set.of()` before processing, and `MessageType.serializeTypes(Set.of())` returns `null`. So the "nothing permitted" semantic (`Set.of()`) cannot be distinguished from "open" (`null`) after storage. Both YAML absent and `[]` result in an open channel. If a "nothing permitted" semantic is genuinely needed, that requires a qhorus change — not a deployment module concern.
 
 **CaseDefinition scope note:** Only identity + metadata fields (namespace, name, version, title, summary) are populated in this pass. `CaseDefinition` is a mutable class with many additional fields (capabilities, workers, bindings, milestones, goals, completion, semanticData, episodicMemoryConfig, panelNames) — full population via `definitionFile` loading is a #7 concern. The handler maps CaseTypeNodeSpec to `CaseDefinition.builder().namespace(...).name(...).version(...).title(...).summary(...).build()`.
 
@@ -259,7 +260,7 @@ After the SPI change (casehubio/casehub-desiredstate#36), tenancyId flows from t
 
 Per node type:
 - **Agent**: `agentRegistry.findById(agentId, tenancyId)` → PRESENT / ABSENT. If present, compares capabilities list for DRIFTED.
-- **Channel**: `channelService.findByName(name)` → returns `Optional<Channel>` (the JPA entity, not `ChannelDetail`). PRESENT / ABSENT. If present, compares `semantic` field directly. For `allowedTypes`/`deniedTypes` drift: `Channel` stores these as comma-separated strings — parse via `MessageType.parseTypes(channel.allowedTypes)` before comparing against the `Set<MessageType>` in `ChannelNodeSpec`.
+- **Channel**: `channelService.findByName(name)` → returns `Optional<Channel>` (the JPA entity, not `ChannelDetail`). PRESENT / ABSENT. **Drift detection compares mutable fields only:** `allowedTypes`, `deniedTypes`, `rateLimitPerChannel`, `rateLimitPerInstance`, `allowedWriters`, `adminInstances`. For `allowedTypes`/`deniedTypes`: `Channel` stores these as comma-separated strings — parse via `MessageType.parseTypes(channel.allowedTypes)` before comparing against the `Set<MessageType>` in `ChannelNodeSpec`. **Immutable fields are excluded from drift detection:** `semantic`, `description`, `barrierContributors`, connector bindings have no setter methods on `ChannelService`. Detecting drift on these would create an unresolvable reconciliation loop (DRIFTED → re-provision → handler can't update → still DRIFTED). Changing an immutable field requires manual deprovision + provision (delete and recreate the channel). Automated immutable-field drift resolution is a #7 concern requiring reconciliation model changes.
 - **Case type**: **Always PRESENT (first-pass simplification).** `CaseDefinitionRegistry.getCaseMetaModel(CaseDefinition)` throws `RuntimeException` on not-found — there is no clean existence query. The deployment module tracks registered case types in its own internal set (same pattern as trust). Real drift detection requires a `findByIdentity()` method on the registry (SPI change to engine-common, tracked for #7).
 - **Trust policy**: **Always PRESENT (first-pass simplification).** The deployment module owns the policy data via `DeploymentTrustRoutingPolicyProvider`. External overrides at higher CDI priority would be invisible. Proper trust drift detection is a #7 concern.
 
@@ -313,8 +314,8 @@ Handlers:
 
 | Handler | Foundation API | Module | Provision | Deprovision | Idempotency |
 |---------|---------------|--------|-----------|-------------|-------------|
-| `AgentProvisionHandler` | `AgentRegistry` | eidos-api | Build `AgentDescriptor` from spec + `context.tenancyId()`, call `register()` | Deregister from eidos | **Idempotent.** `register()` is upsert — `ConcurrentHashMap.put()` overwrites existing. Calling with updated capabilities replaces the descriptor. |
-| `ChannelProvisionHandler` | `ChannelService` | qhorus-runtime | `findByName()` first. If absent → `create(ChannelCreateRequest)`. If present and drifted → update via setter methods (`setTypeConstraints`, `setRateLimits`, `setAllowedWriters`, `setAdminInstances`). If present and not drifted → return `Success`. | Remove channel | **Not idempotent on create.** `@UniqueConstraint(columnNames = {"tenancy_id", "name"})` throws on duplicate name. Handler must check-then-create. Race between find and create caught by constraint — handle `PersistenceException` as success (channel now exists). |
+| `AgentProvisionHandler` | `AgentRegistry` | eidos-api | Build `AgentDescriptor` from spec + `context.tenancyId()`, call `register()` | Deregister from eidos | **Idempotent.** `register()` is upsert — `ConcurrentHashMap.put()` overwrites existing. Calling with updated capabilities replaces the descriptor. **Known constraint:** `InMemoryAgentRegistry` keys by `agentId` alone (not `(agentId, tenancyId)`) — multi-tenant deployments with overlapping agentIds would overwrite across tenants. `JpaAgentRegistry` presumably uses a compound key. Not a deployment module issue — pre-existing eidos design choice. Single-tenant PoC is unaffected. |
+| `ChannelProvisionHandler` | `ChannelService` | qhorus-runtime | `findByName()` first. If absent → `create(ChannelCreateRequest)`. If present → update mutable fields via setters (`setTypeConstraints`, `setRateLimits`, `setAllowedWriters`, `setAdminInstances`). Immutable fields (semantic, description, barrierContributors, connector bindings) are set at creation only — changes require deprovision + provision. | Remove channel | **Not idempotent on create.** `@UniqueConstraint(columnNames = {"tenancy_id", "name"})` throws on duplicate name. Handler must check-then-create. Race between find and create caught by constraint — handle `PersistenceException` as success (channel now exists). |
 | `CaseTypeProvisionHandler` | `CaseDefinitionRegistry` | engine-common | Build `CaseDefinition` via builder (namespace, name, version, title, summary only), call `registerCaseDefinition(def).await().indefinitely()` | Unregister definition | **Idempotent.** `registerCaseDefinition()` returns existing metadata if already registered. `Uni<CaseMetaModel>` return — must await. Full case definition population is #7. |
 | `TrustPolicyProvisionHandler` | Internal policy map | deployment module | Store `TrustRoutingPolicy` keyed by capability name | Remove from map (reverts to `TrustRoutingPolicy.DEFAULT`) | **Idempotent.** Map put overwrites. |
 
@@ -396,7 +397,7 @@ io.casehub.ops.deployment/
 **Must add:**
 
 ```xml
-<!-- ChannelService, ChannelCreateRequest, ReactiveChannelStore, Channel (JPA entity) -->
+<!-- ChannelService, ChannelCreateRequest, Channel (JPA entity) -->
 <dependency>
     <groupId>io.casehub</groupId>
     <artifactId>casehub-qhorus</artifactId>
@@ -423,10 +424,10 @@ All tests are plain JUnit + AssertJ. No `@QuarkusTest`. Foundation APIs stubbed 
 |-----------|--------|
 | `DeploymentGoalCompilerTest` | Each node type's compilation, explicit dependsOn edges, empty sections, GoalEntry wrapping |
 | `AgentProvisionHandlerTest` | AgentNodeSpec → AgentDescriptor field mapping (every field including axisVocabularies), provision + deprovision, tenancyId injection from ProvisionContext |
-| `ChannelProvisionHandlerTest` | ChannelNodeSpec → ChannelCreateRequest mapping, connector binding all-or-nothing, MessageType set conversion, check-then-create idempotency, findByName→update path for drifted channels, null-vs-empty allowedTypes/deniedTypes |
+| `ChannelProvisionHandlerTest` | ChannelNodeSpec → ChannelCreateRequest mapping, connector binding all-or-nothing, MessageType set conversion, check-then-create idempotency, findByName→update path for mutable fields, absent/[] both map to null for allowedTypes/deniedTypes, @Transactional interceptor works from non-request thread (scheduler context) |
 | `CaseTypeProvisionHandlerTest` | CaseTypeNodeSpec → CaseDefinition builder, Uni bridging via await().indefinitely() |
 | `TrustPolicyProvisionHandlerTest` | Policy storage, DeploymentTrustRoutingPolicyProvider serving, fallback to DEFAULT, deprovision reverts |
-| `DeploymentActualStateAdapterTest` | PRESENT / ABSENT / DRIFTED for agent (capabilities mismatch), channel (semantic mismatch, allowedTypes string→Set round-trip via MessageType.parseTypes()). Case type and trust always PRESENT. |
+| `DeploymentActualStateAdapterTest` | PRESENT / ABSENT / DRIFTED for agent (capabilities mismatch), channel (mutable field drift only — allowedTypes string→Set round-trip via MessageType.parseTypes(), rate limits, allowedWriters; immutable fields NOT compared). Case type and trust always PRESENT. |
 | `DeploymentNodeProvisionerTest` | Dispatch by sealed type (exhaustive switch), error path for non-DeploymentNodeSpec |
 | `DeploymentLifecycleIntegrationTest` | End-to-end: compile goals → provision all → read actual → verify all PRESENT |
 
