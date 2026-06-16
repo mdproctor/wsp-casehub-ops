@@ -2,7 +2,7 @@
 
 **Issue:** casehubio/casehub-ops#2
 **Date:** 2026-06-16
-**Status:** Approved
+**Status:** Approved (revision 2 — post-review)
 
 ## Problem
 
@@ -10,7 +10,7 @@ A CaseHub application's topology — agents, channels, case types, trust policie
 
 ## Solution
 
-A deployment module in casehub-ops that implements the casehub-desiredstate SPIs (`GoalCompiler`, `ActualStateAdapter`, `NodeProvisioner`, `FaultPolicy`, `EventSource`) for CaseHub's own topology. A single `casehub-deployment.yaml` declares what should exist. The desiredstate reconciliation loop ensures it does.
+A deployment module in casehub-ops that implements the casehub-desiredstate SPIs for CaseHub's own topology. A single `casehub-deployment.yaml` declares what should exist. The desiredstate reconciliation loop ensures it does.
 
 ## Scope
 
@@ -18,13 +18,51 @@ This spec covers **registration-level provisioning** — ensuring the right desc
 
 ## Key Design Decisions
 
-**No inherent dependency edges.** Agents, channels, case types, and trust policies are independently creatable in the CaseHub platform. `AgentDescriptor` does not reference channels. `CaseDefinition` does not reference agents by ID. Channels do not reference agents. Binding happens at runtime via routing policies, capability matching, and channel dispatch. The deployment graph is flat by default — edges only exist for explicit user-declared `dependsOn` relationships.
+**No inherent dependency edges.** Agents, channels, case types, and trust policies are independently creatable. `AgentDescriptor` does not reference channels. `CaseDefinition` does not reference agents by ID. Channels do not reference agents. Binding happens at runtime. The graph is flat by default — edges only exist for explicit user-declared `dependsOn` relationships.
 
-**No backend abstraction.** The infra module routes provisioning through backends (terraform, ansible, standalone) because the same resource type can be provisioned by different tools. In the deployment domain, each node type has exactly one provisioning target: agents → eidos, channels → qhorus, case types → engine, trust → internal policy store. The provisioner dispatches by node type, not by backend.
+**No backend abstraction.** Each node type has exactly one provisioning target: agents → eidos `AgentRegistry`, channels → qhorus `ChannelService`, case types → engine `CaseDefinitionRegistry`, trust → internal policy store. The provisioner dispatches by node type, not by backend. The infra module's backend layer is justified by multi-tool routing (terraform/ansible/standalone for the same resource type) — the deployment domain has no such routing.
 
-**Topology is layout, not interactions.** The deployment module declares what exists — not how agents communicate, how cases route work, or how sessions start. Process lifecycle (claudony tmux sessions, openclaw gateways) is managed by the existing worker provisioners at case task time. The deployment module manages the declarations that make the platform topology correct.
+**Single type hierarchy — no declaration/spec mirroring.** The infra module separates goal declarations (YAML parse targets) from node specs (graph nodes) because the compiler does genuine transformation: parsing raw JsonNode → typed specs, resolving backends, validating compatibility. The deployment module's compilation is trivial — wrap and extract dependsOn edges. A parallel declaration hierarchy would duplicate every field with no architectural benefit. `DeploymentNodeSpec` records are both the YAML parse targets and the graph node specs. A generic `GoalEntry<S>` wrapper carries `dependsOn` as compilation metadata.
 
-**YAML schema derived from target types.** Every field in the deployment YAML maps 1:1 to a field on the provisioning target (`AgentDescriptor`, `ChannelCreateRequest`, `CaseDefinition`, `TrustRoutingPolicy`). No fictional properties.
+**No wrapper record.** The infra module wraps `InfraNodeSpec` in `InfraDesiredNodeSpec` to carry `backendId` — routing information consumed by the provisioner. The deployment module has no routing. `DeploymentNodeSpec extends NodeSpec` directly — each concrete record is used as `DesiredNode.spec()` without an intermediate wrapper. One fewer class, zero indirection.
+
+**Topology is layout, not interactions.** The deployment module declares what exists — not how agents communicate, how cases route work, or how sessions start. Process lifecycle is managed by existing worker provisioners at case task time.
+
+**YAML schema derived from target types.** Every field maps 1:1 to a field on the provisioning target (`AgentDescriptor`, `ChannelCreateRequest`, `CaseDefinition`, `TrustRoutingPolicy`).
+
+## Desiredstate SPI Signatures (verified)
+
+The deployment module implements these exact interfaces from `casehub-desiredstate-api`:
+
+```java
+// GoalCompiler<G>
+DesiredStateGraph compile(G goals, DesiredStateGraphFactory factory);
+
+// NodeProvisioner
+ProvisionResult provision(DesiredNode node, ProvisionContext context);
+DeprovisionResult deprovision(DesiredNode node, DeprovisionContext context);
+
+// ActualStateAdapter
+ActualState readActual(DesiredStateGraph desired);
+
+// FaultPolicy
+List<GraphMutation> onFault(FaultEvent event, DesiredStateGraph current);
+
+// EventSource
+Multi<StateEvent> stream();
+```
+
+Context records:
+- `ProvisionContext(String tenancyId, DesiredStateGraph graph)`
+- `DeprovisionContext(String tenancyId, DesiredStateGraph graph)`
+
+Result types (sealed, no other variants):
+- `ProvisionResult` → `Success()` | `Failed(String reason)`
+- `DeprovisionResult` → `Success()` | `Failed(String reason)`
+
+FaultType enum: `NODE_DESTROYED`, `NODE_DEGRADED`, `PROVISION_FAILED`, `DEPROVISION_FAILED`, `HUMAN_NODE_TIMEOUT`, `DEPENDENCY_UNAVAILABLE`
+
+A `ReactiveNodeProvisioner` (returns `Uni<T>`) also exists in the API but the deployment module implements the blocking `NodeProvisioner`, consistent with the infra module. `CaseDefinitionRegistry.registerCaseDefinition()` returns `Uni<CaseMetaModel>` — the handler bridges via `await().indefinitely()`.
 
 ## YAML Schema
 
@@ -43,6 +81,9 @@ agents:
     domainVocabulary: null             # AgentDescriptor.domainVocabulary
     slotVocabulary: null               # AgentDescriptor.slotVocabulary
     dispositionVocabulary: null        # AgentDescriptor.dispositionVocabulary
+    axisVocabularies:                  # AgentDescriptor.axisVocabularies (Map<DispositionAxis, String>)
+      SOCIAL_ORIENTATION: "urn:casehub:vocab:social"
+      AUTONOMY: "urn:casehub:vocab:autonomy"
     capabilities:                      # List<AgentCapability>
       - name: code-review             #   AgentCapability.name (required)
         qualityHint: 0.9              #   AgentCapability.qualityHint
@@ -103,118 +144,254 @@ ChannelSemantic values: `APPEND`, `COLLECT`, `BARRIER`, `EPHEMERAL`, `LAST_WRITE
 
 MessageType values: `QUERY`, `COMMAND`, `RESPONSE`, `STATUS`, `DECLINE`, `HANDOFF`, `DONE`, `FAILURE`, `EVENT`.
 
+NodeType strings: `"agent"`, `"channel"`, `"case_type"`, `"trust_policy"`.
+
+**CaseDefinition scope note:** Only identity + metadata fields (namespace, name, version, title, summary) are populated in this pass. `CaseDefinition` is a mutable class with many additional fields (capabilities, workers, bindings, milestones, goals, completion, semanticData, episodicMemoryConfig, panelNames) — full population via `definitionFile` loading is a #7 concern. The handler maps CaseTypeNodeSpec to `CaseDefinition.builder().namespace(...).name(...).version(...).title(...).summary(...).build()`.
+
 ## Architecture
 
 ### Node type hierarchy (ops-api)
 
-```
-DeploymentNodeSpec (sealed interface)
-├── AgentNodeSpec (record)         — all AgentDescriptor fields except tenancyId
-├── ChannelNodeSpec (record)       — all ChannelCreateRequest fields
-├── CaseTypeNodeSpec (record)      — CaseDefinition identity fields
-└── TrustPolicyNodeSpec (record)   — TrustRoutingPolicy fields + capability key
-
-DeploymentDesiredNodeSpec (record, implements NodeSpec)
-└── wraps DeploymentNodeSpec
+```java
+public sealed interface DeploymentNodeSpec extends NodeSpec permits
+    AgentNodeSpec, ChannelNodeSpec, CaseTypeNodeSpec, TrustPolicyNodeSpec {
+    String nodeId();
+    String nodeType();
+}
 ```
 
-`AgentNodeSpec` directly holds `List<AgentCapability>` and `AgentDisposition` from eidos-api. No mirroring layer.
+`DeploymentNodeSpec` directly extends `NodeSpec` (the desiredstate marker interface). No intermediate wrapper. Each concrete record implements `nodeId()` returning its natural identifier and `nodeType()` returning its type string.
+
+| Record | nodeId() | nodeType() | Target type |
+|--------|----------|-----------|-------------|
+| `AgentNodeSpec` | `agentId` | `"agent"` | `AgentDescriptor` |
+| `ChannelNodeSpec` | `name` | `"channel"` | `ChannelCreateRequest` |
+| `CaseTypeNodeSpec` | `namespace + ":" + name + ":" + version` | `"case_type"` | `CaseDefinition` |
+| `TrustPolicyNodeSpec` | `capability` | `"trust_policy"` | `TrustRoutingPolicy` |
+
+`AgentNodeSpec` directly holds `List<AgentCapability>` and `AgentDisposition` from eidos-api. No mirroring types.
 
 ### Goal declaration (ops-api)
 
-```
-DeploymentGoals (record)
-├── agents: List<AgentDeclaration>
-├── channels: List<ChannelDeclaration>
-├── caseTypes: List<CaseTypeDeclaration>
-└── trust: List<TrustPolicyDeclaration>
+```java
+public record GoalEntry<S extends DeploymentNodeSpec>(S spec, List<String> dependsOn) {
+    public GoalEntry {
+        dependsOn = dependsOn != null ? List.copyOf(dependsOn) : List.of();
+    }
+}
+
+public record DeploymentGoals(
+    List<GoalEntry<AgentNodeSpec>> agents,
+    List<GoalEntry<ChannelNodeSpec>> channels,
+    List<GoalEntry<CaseTypeNodeSpec>> caseTypes,
+    List<GoalEntry<TrustPolicyNodeSpec>> trust
+) {}
 ```
 
-Each declaration record mirrors the YAML structure. The compiler maps declarations to typed node specs.
+`GoalEntry` carries `dependsOn` as compilation metadata — the only field consumed by the compiler but irrelevant to provisioning. The spec itself is used directly as `DesiredNode.spec()`.
 
 ### GoalCompiler (deployment module)
 
 `DeploymentGoalCompiler implements GoalCompiler<DeploymentGoals>`:
-- Iterates each section, maps declarations to `DeploymentNodeSpec`, wraps in `DeploymentDesiredNodeSpec`
-- Creates `DesiredNode(NodeId.of(id), NodeType.of(type), wrapper, false)` for each
-- Collects explicit `dependsOn` edges as `Dependency` instances
-- Returns `factory.of(nodes, dependencies)`
+
+```java
+@ApplicationScoped
+public class DeploymentGoalCompiler implements GoalCompiler<DeploymentGoals> {
+
+    @Override
+    public DesiredStateGraph compile(DeploymentGoals goals, DesiredStateGraphFactory factory) {
+        List<DesiredNode> nodes = new ArrayList<>();
+        List<Dependency> dependencies = new ArrayList<>();
+
+        compileEntries(goals.agents(), nodes, dependencies);
+        compileEntries(goals.channels(), nodes, dependencies);
+        compileEntries(goals.caseTypes(), nodes, dependencies);
+        compileEntries(goals.trust(), nodes, dependencies);
+
+        return factory.of(nodes, dependencies);
+    }
+
+    private <S extends DeploymentNodeSpec> void compileEntries(
+            List<GoalEntry<S>> entries, List<DesiredNode> nodes, List<Dependency> deps) {
+        for (var entry : entries) {
+            var spec = entry.spec();
+            nodes.add(new DesiredNode(
+                NodeId.of(spec.nodeId()), NodeType.of(spec.nodeType()), spec, false));
+            for (String dep : entry.dependsOn()) {
+                deps.add(new Dependency(NodeId.of(spec.nodeId()), NodeId.of(dep)));
+            }
+        }
+    }
+}
+```
 
 `requiresHuman` is `false` for all deployment node types.
 
 ### ActualStateAdapter (deployment module)
 
 `DeploymentActualStateAdapter implements ActualStateAdapter`:
-- Injects `AgentRegistry` (eidos), `ReactiveChannelStore` (qhorus), `CaseDefinitionRegistry` (engine)
-- Per node type:
-  - **Agent**: `agentRegistry.findById(agentId, tenancyId)` → PRESENT / ABSENT / DRIFTED (capabilities mismatch)
-  - **Channel**: `channelStore.findByName(name)` → PRESENT / ABSENT / DRIFTED (semantic or allowedTypes mismatch)
-  - **Case type**: query by namespace/name/version → PRESENT / ABSENT / DRIFTED (version mismatch)
-  - **Trust policy**: always PRESENT (we own the policy data via `DeploymentTrustRoutingPolicyProvider`)
+- Injects `AgentRegistry` (from eidos-api — blocking)
+- Injects `ReactiveChannelStore` (from qhorus-runtime — reactive, bridged via `await().indefinitely()`)
+- Injects `CaseDefinitionRegistry` (from engine-common — reactive methods bridged)
+- Trust policy: reads from `DeploymentTrustRoutingPolicyProvider`'s internal map
 
-Drift detection compares identity + key structural fields for this pass. Full field-by-field comparison in #7.
+Per node type:
+- **Agent**: `agentRegistry.findById(agentId, tenancyId)` → PRESENT / ABSENT. If present, compares capabilities list for DRIFTED.
+- **Channel**: `channelStore.findByName(name).await().indefinitely()` → returns `Optional<Channel>` (the JPA entity, not `ChannelDetail`). PRESENT / ABSENT. If present, compares `semantic` and `allowedTypes` fields on the `Channel` entity for DRIFTED.
+- **Case type**: `caseDefRegistry.getCaseMetaModel()` or equivalent query by namespace/name/version → PRESENT / ABSENT. Version mismatch → DRIFTED.
+- **Trust policy**: **Always PRESENT.** This is an explicit first-pass simplification: the deployment module owns the policy data via its in-memory map (`DeploymentTrustRoutingPolicyProvider`), so the declared policy is always consistent with itself. External changes (a different `TrustRoutingPolicyProvider` at higher CDI priority overriding the deployment module's policies) would be invisible. Proper trust drift detection requires querying the effective policy from the CDI container — a #7 concern.
+
+Drift detection compares identity + key structural fields for this pass. Full field-by-field comparison is a #7 concern.
+
+`tenancyId` for queries comes from `ProvisionContext.tenancyId()` — stored by the adapter when `readActual()` is called. Note: `ProvisionContext` is not passed to `readActual()` (the SPI takes only `DesiredStateGraph`). The adapter must resolve tenancyId via CDI (e.g., injecting `CurrentPrincipal` from casehub-platform-api) or receive it through another mechanism. This needs resolution during implementation.
 
 ### NodeProvisioner and handlers (deployment module)
 
 `DeploymentNodeProvisioner implements NodeProvisioner`:
-- Dispatches via exhaustive `switch` on `DeploymentNodeSpec` sealed permits
-- Delegates to four `@ApplicationScoped` handler classes
+
+```java
+@ApplicationScoped
+public class DeploymentNodeProvisioner implements NodeProvisioner {
+
+    private final AgentProvisionHandler agentHandler;
+    private final ChannelProvisionHandler channelHandler;
+    private final CaseTypeProvisionHandler caseTypeHandler;
+    private final TrustPolicyProvisionHandler trustHandler;
+
+    @Inject
+    public DeploymentNodeProvisioner(...) { ... }
+
+    @Override
+    public ProvisionResult provision(DesiredNode node, ProvisionContext context) {
+        if (!(node.spec() instanceof DeploymentNodeSpec spec))
+            return new ProvisionResult.Failed("spec is not DeploymentNodeSpec");
+
+        return switch (spec) {
+            case AgentNodeSpec s -> agentHandler.provision(s, context);
+            case ChannelNodeSpec s -> channelHandler.provision(s, context);
+            case CaseTypeNodeSpec s -> caseTypeHandler.provision(s, context);
+            case TrustPolicyNodeSpec s -> trustHandler.provision(s, context);
+        };
+    }
+
+    @Override
+    public DeprovisionResult deprovision(DesiredNode node, DeprovisionContext context) {
+        if (!(node.spec() instanceof DeploymentNodeSpec spec))
+            return new DeprovisionResult.Failed("spec is not DeploymentNodeSpec");
+
+        return switch (spec) {
+            case AgentNodeSpec s -> agentHandler.deprovision(s, context);
+            case ChannelNodeSpec s -> channelHandler.deprovision(s, context);
+            case CaseTypeNodeSpec s -> caseTypeHandler.deprovision(s, context);
+            case TrustPolicyNodeSpec s -> trustHandler.deprovision(s, context);
+        };
+    }
+}
+```
 
 Handlers:
 
-| Handler | Foundation API | Provision action | Deprovision action |
-|---------|---------------|-----------------|-------------------|
-| `AgentProvisionHandler` | `AgentRegistry` (eidos) | Build `AgentDescriptor` from spec + `tenancyId` from context, call `register()` | Deregister from eidos |
-| `ChannelProvisionHandler` | `ChannelService` (qhorus) | Build `ChannelCreateRequest` from spec, call `create()` | Remove channel |
-| `CaseTypeProvisionHandler` | `CaseDefinitionRegistry` (engine) | Build `CaseDefinition` via builder, call `registerCaseDefinition()` | Unregister definition |
-| `TrustPolicyProvisionHandler` | Internal policy map | Store `TrustRoutingPolicy` keyed by capability | Remove from map (reverts to DEFAULT) |
+| Handler | Foundation API | Module | Provision | Deprovision | Notes |
+|---------|---------------|--------|-----------|-------------|-------|
+| `AgentProvisionHandler` | `AgentRegistry` | eidos-api | Build `AgentDescriptor` from spec fields + `context.tenancyId()`, call `register()` (blocking) | Deregister from eidos | Field-by-field mapping: AgentNodeSpec → AgentDescriptor. `tenancyId` injected from context. |
+| `ChannelProvisionHandler` | `ChannelService` | qhorus-runtime | Build `ChannelCreateRequest` from spec fields, call `create(request)` (blocking, @Transactional) | Remove channel | Connector binding fields pass through (all-or-nothing validation on ChannelCreateRequest). `tenancyId` set by ChannelService from CurrentPrincipal. |
+| `CaseTypeProvisionHandler` | `CaseDefinitionRegistry` | engine-common | Build `CaseDefinition` via builder (namespace, name, version, title, summary only), call `registerCaseDefinition(def).await().indefinitely()` (reactive → blocking bridge) | Unregister definition | Returns `Uni<CaseMetaModel>` — must await. Full case definition population is #7. |
+| `TrustPolicyProvisionHandler` | Internal policy map | deployment module | Store `TrustRoutingPolicy` keyed by capability name | Remove from map (reverts to `TrustRoutingPolicy.DEFAULT`) | Feeds `DeploymentTrustRoutingPolicyProvider`. |
 
-`TrustPolicyProvisionHandler` feeds `DeploymentTrustRoutingPolicyProvider`, which implements `TrustRoutingPolicyProvider` and serves policies from the stored map with `TrustRoutingPolicy.DEFAULT` as fallback.
+`DeploymentTrustRoutingPolicyProvider` implements `TrustRoutingPolicyProvider` (from engine-api). Serves policies from the handler's stored map. Falls back to `TrustRoutingPolicy.DEFAULT` for undeclared capabilities.
 
 ### FaultPolicy (deployment module)
 
-`DeploymentFaultPolicy implements FaultPolicy` — returns `List.of()`. No graph mutations for this pass. The runtime handles retry and re-provisioning. Graph mutations become relevant in #7 when provider-specific failures may warrant node replacement.
+```java
+@ApplicationScoped
+public class DeploymentFaultPolicy implements FaultPolicy {
+    @Override
+    public List<GraphMutation> onFault(FaultEvent event, DesiredStateGraph current) {
+        return List.of();
+    }
+}
+```
+
+No graph mutations for this pass. The runtime handles retry and re-provisioning. The `FaultEvent` carries a `FaultType` (one of: `NODE_DESTROYED`, `NODE_DEGRADED`, `PROVISION_FAILED`, `DEPROVISION_FAILED`, `HUMAN_NODE_TIMEOUT`, `DEPENDENCY_UNAVAILABLE`). Graph mutations become relevant in #7 when provider-specific failures may warrant node replacement.
 
 ### EventSource (deployment module)
 
-`DeploymentEventSource implements EventSource` — hot `Multi<StateEvent>` with broadcast. Provides `emit(StateEvent)` and `emitDrift(NodeId)`. Not wired to external event sources for this pass — reconciliation loop's periodic polling via `ActualStateAdapter` is the primary drift detection mechanism. Wiring foundation module CDI events to `emit()` is a follow-up concern.
+```java
+@ApplicationScoped
+public class DeploymentEventSource implements EventSource {
+    // hot Multi<StateEvent> with broadcast
+    // emit(StateEvent) for external callers to push drift signals
+    // emitDrift(NodeId) convenience method
+}
+```
 
-## Package layout
+Not wired to external event sources for this pass. Reconciliation loop's periodic polling via `ActualStateAdapter` is the primary drift detection mechanism. Wiring foundation module CDI events (`@Observes` on eidos/qhorus/engine state changes) to `emit()` is a follow-up concern.
+
+## Package Layout
 
 **`api/` (casehub-ops-api):**
 
 ```
 io.casehub.ops.api.deployment/
-├── DeploymentNodeSpec.java
-├── AgentNodeSpec.java
-├── ChannelNodeSpec.java
-├── CaseTypeNodeSpec.java
-├── TrustPolicyNodeSpec.java
-├── DeploymentDesiredNodeSpec.java
-└── goal/
-    ├── DeploymentGoals.java
-    ├── AgentDeclaration.java
-    ├── ChannelDeclaration.java
-    ├── CaseTypeDeclaration.java
-    └── TrustPolicyDeclaration.java
+├── DeploymentNodeSpec.java          # sealed interface extends NodeSpec
+├── AgentNodeSpec.java               # record — all AgentDescriptor fields except tenancyId
+├── ChannelNodeSpec.java             # record — all ChannelCreateRequest fields
+├── CaseTypeNodeSpec.java            # record — CaseDefinition identity fields
+├── TrustPolicyNodeSpec.java         # record — TrustRoutingPolicy fields + capability key
+├── GoalEntry.java                   # record<S extends DeploymentNodeSpec>(S spec, List<String> dependsOn)
+└── DeploymentGoals.java             # record — top-level goal declaration
 ```
+
+7 classes total. No Declaration hierarchy, no wrapper record.
 
 **`deployment/` (casehub-ops-deployment):**
 
 ```
 io.casehub.ops.deployment/
-├── DeploymentGoalCompiler.java
-├── DeploymentActualStateAdapter.java
-├── DeploymentNodeProvisioner.java
-├── DeploymentFaultPolicy.java
-├── DeploymentEventSource.java
-├── DeploymentTrustRoutingPolicyProvider.java
+├── DeploymentGoalCompiler.java          # GoalCompiler<DeploymentGoals>
+├── DeploymentActualStateAdapter.java    # ActualStateAdapter
+├── DeploymentNodeProvisioner.java       # NodeProvisioner (dispatch switch)
+├── DeploymentFaultPolicy.java           # FaultPolicy (empty)
+├── DeploymentEventSource.java           # EventSource (hot Multi<StateEvent>)
+├── DeploymentTrustRoutingPolicyProvider.java  # TrustRoutingPolicyProvider impl
 └── handler/
-    ├── AgentProvisionHandler.java
-    ├── ChannelProvisionHandler.java
-    ├── CaseTypeProvisionHandler.java
-    └── TrustPolicyProvisionHandler.java
+    ├── AgentProvisionHandler.java       # eidos AgentRegistry
+    ├── ChannelProvisionHandler.java     # qhorus ChannelService
+    ├── CaseTypeProvisionHandler.java    # engine CaseDefinitionRegistry
+    └── TrustPolicyProvisionHandler.java # stores policies, feeds provider
 ```
+
+## Dependencies
+
+**Already in `deployment/pom.xml`:**
+- `casehub-desiredstate-api` — SPIs being implemented
+- `casehub-eidos-api` — `AgentDescriptor`, `AgentCapability`, `AgentDisposition`, `AgentRegistry`, `AgentQuery`
+- `casehub-qhorus-api` — `ChannelSemantic`, `MessageType` (enum types only — store and service are in runtime)
+- `casehub-engine-api` — `CaseDefinition`, `TrustRoutingPolicy`, `TrustRoutingPolicyProvider`
+- `casehub-work-api` — not used in this pass
+- `casehub-platform-api` — `CurrentPrincipal` for tenancy context
+- `quarkus-arc` — CDI
+- `casehub-desiredstate-testing` (test scope)
+
+**Must add:**
+
+```xml
+<!-- ChannelService, ChannelCreateRequest, ReactiveChannelStore, Channel (JPA entity) -->
+<dependency>
+    <groupId>io.casehub</groupId>
+    <artifactId>casehub-qhorus</artifactId>
+    <scope>provided</scope>
+</dependency>
+
+<!-- CaseDefinitionRegistry (io.casehub.engine.common.spi) -->
+<dependency>
+    <groupId>io.casehub</groupId>
+    <artifactId>casehub-engine-common</artifactId>
+    <scope>provided</scope>
+</dependency>
+```
+
+`provided` scope is correct: the deployment module is a Jandex library activated by classpath presence. Any application consuming it will already have qhorus-runtime and engine-common on its classpath. `casehub-engine-common` does NOT contain the full CDI bean graph that causes the 31+ failure issue (GE-20260529-b5723e — that's `casehub-engine` runtime). engine-common depends on engine-api, mutiny, jackson-databind, quarkus-vertx, and serverlessworkflow — no dangerous CDI beans.
 
 ## Testing
 
@@ -222,48 +399,24 @@ All tests are plain JUnit + AssertJ. No `@QuarkusTest`. Foundation APIs stubbed 
 
 | Test class | Covers |
 |-----------|--------|
-| `DeploymentGoalCompilerTest` | Each node type's compilation, explicit dependsOn edges, empty sections |
-| `AgentProvisionHandlerTest` | AgentNodeSpec → AgentDescriptor field mapping, provision + deprovision |
-| `ChannelProvisionHandlerTest` | ChannelNodeSpec → ChannelCreateRequest mapping, connector binding all-or-nothing |
-| `CaseTypeProvisionHandlerTest` | CaseTypeNodeSpec → CaseDefinition builder mapping |
-| `TrustPolicyProvisionHandlerTest` | Policy storage, provider serving, fallback to DEFAULT |
-| `DeploymentActualStateAdapterTest` | PRESENT / ABSENT / DRIFTED for each node type |
-| `DeploymentNodeProvisionerTest` | Dispatch by node type, error path for wrong spec type |
-| `DeploymentLifecycleIntegrationTest` | End-to-end: compile → provision all → read actual → verify all PRESENT |
-
-## Dependencies
-
-Already declared in `deployment/pom.xml`:
-- `casehub-desiredstate-api` — SPIs being implemented
-- `casehub-eidos-api` — `AgentDescriptor`, `AgentCapability`, `AgentDisposition`, `AgentRegistry`
-- `casehub-qhorus-api` — `ChannelSemantic`, `MessageType`, `ChannelDetail`, `ReactiveChannelStore`
-- `casehub-engine-api` — `CaseDefinition`, `TrustRoutingPolicy`, `TrustRoutingPolicyProvider`
-- `casehub-work-api` — not used in this pass (no work-routing node type)
-- `casehub-platform-api` — tenancy context
-- `quarkus-arc` — CDI
-- `casehub-desiredstate-testing` (test scope)
-
-`ChannelService` and `ChannelCreateRequest` are in `casehub-qhorus` runtime, not api. The deployment module needs a `<scope>provided</scope>` dependency on `casehub-qhorus` runtime to access channel creation. This is safe — the deployment module is a Jandex library activated by classpath presence, and any application using it will already have qhorus runtime on the classpath. Add to `deployment/pom.xml`:
-
-```xml
-<dependency>
-    <groupId>io.casehub</groupId>
-    <artifactId>casehub-qhorus</artifactId>
-    <scope>provided</scope>
-</dependency>
-```
-
-Similarly, check whether `AgentRegistry.register()` is in eidos-api or eidos runtime. If runtime, same pattern applies.
+| `DeploymentGoalCompilerTest` | Each node type's compilation, explicit dependsOn edges, empty sections, GoalEntry wrapping |
+| `AgentProvisionHandlerTest` | AgentNodeSpec → AgentDescriptor field mapping (every field including axisVocabularies), provision + deprovision, tenancyId injection from ProvisionContext |
+| `ChannelProvisionHandlerTest` | ChannelNodeSpec → ChannelCreateRequest mapping, connector binding all-or-nothing, MessageType set conversion |
+| `CaseTypeProvisionHandlerTest` | CaseTypeNodeSpec → CaseDefinition builder, Uni bridging via await().indefinitely() |
+| `TrustPolicyProvisionHandlerTest` | Policy storage, DeploymentTrustRoutingPolicyProvider serving, fallback to DEFAULT, deprovision reverts |
+| `DeploymentActualStateAdapterTest` | PRESENT / ABSENT / DRIFTED for agent (capabilities mismatch), channel (semantic/allowedTypes mismatch), case type (version). Trust always PRESENT. |
+| `DeploymentNodeProvisionerTest` | Dispatch by sealed type (exhaustive switch), error path for non-DeploymentNodeSpec |
+| `DeploymentLifecycleIntegrationTest` | End-to-end: compile goals → provision all → read actual → verify all PRESENT |
 
 ## Follow-up
 
-casehubio/casehub-ops#7 — application-level topology provisioning: provider-specific agent config, connector integration, case definition file loading, cross-repo claudony/openclaw integration, full-field drift detection.
+casehubio/casehub-ops#7 — application-level topology provisioning: provider-specific agent config, connector integration, case definition file loading, cross-repo claudony/openclaw integration, full-field drift detection, trust policy drift detection via effective CDI resolution.
 
 ## Garden entries noted
 
-Relevant GEs from casehub/garden to keep in context during implementation:
-- `GE-20260529-b5723e` — casehub-engine full runtime as compile dep causes 31+ CDI failures (use -api only)
+Relevant GEs to keep in context during implementation:
+- `GE-20260529-b5723e` — casehub-engine full runtime as compile dep causes 31+ CDI failures (use -api and -common only)
 - `GE-20260607-a4d78a` — ChannelSlugValidator: slugs must start with letter, hyphens only
-- `GE-20260613-7b7ae1` — ChannelService.create() now requires ChannelCreateRequest (API changed)
-- `GE-20260517-5b8e78` — qhorus core services are CDI-injectable
+- `GE-20260613-7b7ae1` — ChannelService.create() now requires ChannelCreateRequest (no 9-arg overload)
+- `GE-20260517-5b8e78` — qhorus core services (ChannelService, ReactiveChannelStore) are CDI-injectable
 - `GE-20260516-2805b7` — abstract superclasses indexed by Jandex fail deployment
