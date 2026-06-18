@@ -1,0 +1,9 @@
+branch: issue-3-compliance-posture-domain
+project-sha: 90df5b5857be5752b2622ff6648d41155023d9aa
+date: 2026-06-18
+issue: 3
+issue-repo: casehubio/casehub-ops
+covers: 3
+flyway-next-v: none
+design-repo: project
+design-section-hashes: 
