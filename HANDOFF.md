@@ -6,6 +6,8 @@ Closed #9 (ARC42STORIES.MD migration). Created 732-line architecture record from
 ## Immediate Next Step
 Pick next domain module. Run `/work` to start. Open issues: #4 (IoT domain — L/Med), #8 (worker import migration — XS/Low). Also: casehubio/casehub-desiredstate#38 (TransitionPlanner DRIFTED fix) remains prerequisite for drift self-healing.
 
+*Updated: #9 closed — removed from backlog.*
+
 ## Cross-Module
 **Blocked by:**
 - `casehub-desiredstate` — TransitionPlanner has no DRIFTED code path (#38); compliance evidence re-collection and deployment drift self-healing both blocked · S · Low
