@@ -1,10 +1,10 @@
 # Handoff — casehub-ops
 
 ## Last Session
-Closed #3 (compliance posture domain). Built the compliance module — six frameworks, six control types, evidence-based drift detection via `ComplianceLedgerEntry`, per-framework posture scoring with five-category model. 42 compliance tests. Post-close: fixed `AgentCapability` binary incompatibility (eidos added `excludedDomains` 9th field), bumped casehub-iot to 0.2-SNAPSHOT. CI fully green across all modules.
+Closed #9 (ARC42STORIES.MD migration). Created 732-line architecture record from scratch — §1–§13, four chapters mapped to domain epics, layer entries with key files/wiring/gotchas/pattern-to-replicate. First integration-tier ARC42STORIES.MD in the CaseHub ecosystem. CLAUDE.md updated to declare it as primary record.
 
 ## Immediate Next Step
-Pick next domain module. Run `/work` to start. Open issues: #4 (IoT). Also: casehubio/casehub-desiredstate#38 (TransitionPlanner DRIFTED fix) remains prerequisite for drift self-healing — one-line change, could land quickly.
+Pick next domain module. Run `/work` to start. Open issues: #4 (IoT domain — L/Med), #8 (worker import migration — XS/Low). Also: casehubio/casehub-desiredstate#38 (TransitionPlanner DRIFTED fix) remains prerequisite for drift self-healing.
 
 ## Cross-Module
 **Blocked by:**
@@ -17,9 +17,9 @@ Pick next domain module. Run `/work` to start. Open issues: #4 (IoT). Also: case
 
 | # | Description | Scale | Complexity | Notes |
 |---|-------------|-------|------------|-------|
-| #4 | Epic 3: IoT desired state domain | L | Med | casehub-iot foundation exists, now on 0.2-SNAPSHOT |
+| #4 | Epic 3: IoT desired state domain | L | Med | casehub-iot foundation exists, on 0.2-SNAPSHOT |
+| #8 | Refactor: migrate Worker imports to casehub-worker-api | XS | Low | Mechanical import update |
 
 ## References
-- Spec: `docs/superpowers/specs/2026-06-18-compliance-posture-domain-design.md`
-- Plan: `docs/superpowers/plans/2026-06-18-compliance-posture-domain.md`
-- Blog: `blog/2026-06-18-mdp01-compliance-posture-desired-state.md`
+- Architecture: `ARC42STORIES.MD` (project root)
+- Blog: `blog/2026-06-23-mdp01-arc42stories-migration.md`
