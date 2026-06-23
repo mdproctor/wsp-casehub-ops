@@ -1,0 +1,9 @@
+branch: issue-9-arc42stories-migration
+project-sha: 28f8916f73fa0c0e254037b405ce7fcb9818f84b
+date: 2026-06-23
+issue: 9
+issue-repo: casehubio/casehub-ops
+covers: 9
+flyway-next-v: none
+design-repo: project
+design-section-hashes: 
