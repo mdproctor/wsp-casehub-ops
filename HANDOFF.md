@@ -6,6 +6,8 @@ Implemented Epic 3 (#4) — IoT desired-state domain. Full lifecycle: brainstorm
 ## Immediate Next Step
 Run `work-end` on branch `issue-4-iot-desired-state` to close #4 — code review, ARC42 journal merge, squash, push, issue close.
 
+*Updated: desiredstate#38 closed — blocker cleared.*
+
 ## Cross-Module
 **Blocked by:**
 - `casehub-desiredstate` — SimpleTransitionExecutor has no WorkItem creation for requiresHuman=true (#43); physical device tracking is forward-compatible but inert until fixed · S · Low
