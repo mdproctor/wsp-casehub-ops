@@ -1,27 +1,28 @@
 # Handoff — casehub-ops
 
 ## Last Session
-Closed #9 (ARC42STORIES.MD migration). Created 732-line architecture record from scratch — §1–§13, four chapters mapped to domain epics, layer entries with key files/wiring/gotchas/pattern-to-replicate. First integration-tier ARC42STORIES.MD in the CaseHub ecosystem. CLAUDE.md updated to declare it as primary record.
+Implemented Epic 3 (#4) — IoT desired-state domain. Full lifecycle: brainstorming (4 spec review rounds), subagent-driven TDD (9 tasks), 122 tests passing. Branch `issue-4-iot-desired-state` is implementation-complete and ready for work-end.
 
 ## Immediate Next Step
-Pick next domain module. Run `/work` to start. Open issues: #4 (IoT domain — L/Med), #8 (worker import migration — XS/Low). Also: casehubio/casehub-desiredstate#38 (TransitionPlanner DRIFTED fix) remains prerequisite for drift self-healing.
-
-*Updated: #9 closed — removed from backlog.*
+Run `work-end` on branch `issue-4-iot-desired-state` to close #4 — code review, ARC42 journal merge, squash, push, issue close.
 
 ## Cross-Module
 **Blocked by:**
-- `casehub-desiredstate` — TransitionPlanner has no DRIFTED code path (#38); compliance evidence re-collection and deployment drift self-healing both blocked · S · Low
+- `casehub-desiredstate` — SimpleTransitionExecutor has no WorkItem creation for requiresHuman=true (#43); physical device tracking is forward-compatible but inert until fixed · S · Low
 
 ## What's Left
-- desiredstate#38 TransitionPlanner DRIFTED fix — filed, one-line change · S · Low
+- desiredstate#43 WorkItem creation for requiresHuman — filed this session · S · Low
+- parent#309 PLATFORM.md dependency row casehub-iot-api → casehub-ops/iot — filed this session · XS · Low
+- ops#10 IoTFaultPolicy domain-specific fault responses — deferred, needs operational feedback · M · Med
 
 ## What's Next
 
 | # | Description | Scale | Complexity | Notes |
 |---|-------------|-------|------------|-------|
-| #4 | Epic 3: IoT desired state domain | L | Med | casehub-iot foundation exists, on 0.2-SNAPSHOT |
-| #8 | Refactor: migrate Worker imports to casehub-worker-api | XS | Low | Mechanical import update |
+| #8 | Refactor: migrate Worker imports to casehub-worker-api | XS | Low | Blocked by engine#543 |
 
 ## References
+- Spec: `docs/superpowers/specs/2026-06-24-iot-desired-state-design.md`
+- Plan: `docs/superpowers/plans/2026-06-24-iot-desired-state.md`
+- Blog: `blog/2026-06-25-mdp01-iot-desired-state-type-boundary.md`
 - Architecture: `ARC42STORIES.MD` (project root)
-- Blog: `blog/2026-06-23-mdp01-arc42stories-migration.md`
