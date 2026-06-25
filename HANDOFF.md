@@ -1,3 +1,5 @@
+*Updated: parent#309 closed — removed from backlog.*
+
 # Handoff — casehub-ops
 
 ## Last Session
@@ -12,7 +14,6 @@ Pick next work. Open issues: #8 (worker import migration — XS/Low, blocked by 
 
 ## What's Left
 - desiredstate#43 WorkItem creation for requiresHuman — filed, open · S · Low
-- parent#309 PLATFORM.md dependency row casehub-iot-api → casehub-ops/iot · XS · Low
 - ops#10 IoTFaultPolicy domain-specific fault responses — deferred, needs operational feedback · M · Med
 
 ## What's Next
