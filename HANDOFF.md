@@ -1,6 +1,6 @@
 # Handoff — casehub-ops
 
-*Updated: parent#312 closed — removed from backlog.*
+*Updated: parent#312, platform#117 closed — removed from backlog.*
 
 ## Last Session
 Closed #12 (agentIds() on DeploymentProviderConfigStore). XS change — single method + 4 tests. ARC42STORIES.MD stale scan removed resolved desiredstate#38 from active risks and #8 from tech debt.
@@ -11,11 +11,9 @@ Pick next work. Remaining open issues are both deferred: #10 (IoTFaultPolicy —
 ## Cross-Module
 **Blocked by:**
 - `casehub-desiredstate` — SimpleTransitionExecutor has no WorkItem creation for requiresHuman=true (desiredstate#43) · S · Low
-- `casehub-platform` — verify EndpointRegistered CDI event fires (platform#117) · XS · Low
 
 ## What's Left
 - desiredstate#43 WorkItem creation for requiresHuman — filed, open · S · Low
-- platform#117 EndpointRegistered event verification — filed, open · XS · Low
 
 ## What's Next
 
