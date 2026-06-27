@@ -1,5 +1,5 @@
-# Branch Closed: issue-4-iot-desired-state
+# Branch Closed: issue-12-agentids-config-store
 
-**Date:** 2026-06-25
-**Issues:** 4
+**Date:** 2026-06-27
+**Issues:** 12
 **Status:** merged to main
