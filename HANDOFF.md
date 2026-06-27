@@ -1,29 +1,30 @@
-*Updated: parent#309 closed — removed from backlog.*
-
 # Handoff — casehub-ops
 
 ## Last Session
-Closed #4 (IoT desired-state domain). Code review clean (0 findings). Journal merged to ARC42STORIES.MD — §4 type strategy table, §8 capability normalization + DRIFTED fix update, §9 chapter 4 + L5 layer entry. All four domain journey chapters now ✅. Squashed 20→11 commits, pushed to origin/main. Blog published. desiredstate#38 closed externally.
+Closed #6 (EndpointNodeSpec — 5th deployment node type). Endpoint provisioning via EndpointRegistry, drift detection via toDescriptor() + record equals(). Also closed #8 (worker import migration — not applicable, no Worker imports in ops). readActual(graph, tenancyId) SPI propagated to all 4 modules. Blog published. parent#312 filed for PLATFORM.md updates. platform#117 filed to verify EndpointRegistered CDI event firing.
 
 ## Immediate Next Step
-Pick next work. Open issues: #8 (worker import migration — XS/Low, blocked by engine#543), #10 (IoTFaultPolicy domain-specific responses — M/Med). Run `/work` to start.
+Pick next work. Open issues: #10 (IoTFaultPolicy — M/Med, deferred pending operational feedback), #11 (DetectionNodeSpec — deferred pending RAS declarative API), #12 (agentIds() on DeploymentProviderConfigStore). Run `/work` to start.
 
 ## Cross-Module
 **Blocked by:**
-- `casehub-desiredstate` — SimpleTransitionExecutor has no WorkItem creation for requiresHuman=true (#43); IoT physical device tracking is forward-compatible but inert · S · Low
+- `casehub-desiredstate` — SimpleTransitionExecutor has no WorkItem creation for requiresHuman=true (desiredstate#43) · S · Low
+- `casehub-platform` — verify EndpointRegistered CDI event fires from real EndpointRegistry (platform#117) · XS · Low
 
 ## What's Left
 - desiredstate#43 WorkItem creation for requiresHuman — filed, open · S · Low
-- ops#10 IoTFaultPolicy domain-specific fault responses — deferred, needs operational feedback · M · Med
+- parent#312 PLATFORM.md update for endpoint node type — filed, open · XS · Low
+- platform#117 EndpointRegistered event verification — filed, open · XS · Low
 
 ## What's Next
 
 | # | Description | Scale | Complexity | Notes |
 |---|-------------|-------|------------|-------|
-| #8 | Refactor: migrate Worker imports to casehub-worker-api | XS | Low | Blocked by engine#543 |
+| #12 | agentIds() on DeploymentProviderConfigStore | XS | Low | Consumer enumeration |
 | #10 | IoTFaultPolicy domain-specific fault responses | M | Med | Deferred — needs operational feedback |
+| #11 | DetectionNodeSpec — RAS situation registration | M | Med | Deferred — requires RAS declarative API |
 
 ## References
 - Architecture: `ARC42STORIES.MD` (project root)
-- Spec: `docs/superpowers/specs/2026-06-24-iot-desired-state-design.md`
-- Blog: `blog/2026-06-25-mdp01-iot-desired-state-type-boundary.md`
+- Spec: `docs/superpowers/specs/2026-06-26-deployment-endpoint-node-type-design.md`
+- Blog: `blog/2026-06-26-mdp01-deployment-endpoint-topology.md`
