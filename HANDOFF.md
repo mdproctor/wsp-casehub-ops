@@ -1,5 +1,7 @@
 # Handoff — casehub-ops
 
+*Updated: desiredstate#43 closed — removed from blockers.*
+
 ## Last Session
 Closed #14 (ChannelDriftChecker enrichment — full field comparison, connector binding drift, tenancy fix, CSV set comparison). Cross-repo sweep: closed platform#117 (already implemented), filed ops#13 (PendingApproval provisioner support blocked by desiredstate#14). Garden entry GE-20260628-f5c99f (functional interface masking tenancy parameter).
 
@@ -8,11 +10,9 @@ Pick next work. #10 and #11 are deferred. #13 is blocked by desiredstate#14 (in 
 
 ## Cross-Module
 **Blocked by:**
-- `casehub-desiredstate` — SimpleTransitionExecutor has no WorkItem creation for requiresHuman=true (desiredstate#43) · S · Low
 - `casehub-desiredstate` — ReconciliationLoop PendingApproval workflow (desiredstate#14) blocks ops#13 · M · Med
 
 ## What's Left
-- desiredstate#43 WorkItem creation for requiresHuman — filed, open · S · Low
 - ops#13 PendingApproval provisioner support — filed, blocked by desiredstate#14 · M · Med
 
 ## What's Next
