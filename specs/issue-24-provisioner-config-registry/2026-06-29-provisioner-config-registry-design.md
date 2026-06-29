@@ -14,6 +14,13 @@ The engine defines `ProvisionerConfigRegistry` (in `io.casehub.api.spi`) with a 
 `@DefaultBean` implementation. When ops-deployment is on the classpath, the no-op should be
 displaced by a real implementation backed by the store.
 
+**Consumer status:** `ProvisionerConfigRegistry.configFor()` and `declaredAgentIds()` currently
+have zero call sites in the engine or consumer codebases. This spec implements the producer side
+(ops). Consumer migration is tracked via engine#584 which remains open until at least one consumer
+(Claudony, OpenClaw) migrates. claudony#164 was closed for the earlier `ProviderConfigSource` SPI,
+not `ProvisionerConfigRegistry` — a new Claudony issue is needed to track migration to the engine
+SPI. ops#24 remains open until this implementation is merged.
+
 ## Root Fix: Store Data Model
 
 The store currently uses `ConcurrentHashMap<String, List<ProviderConfig>>` — keyed by agentId,
@@ -28,7 +35,7 @@ where the inner map is keyed by `providerName`. This makes the invariant structu
 | Method | Before | After |
 |--------|--------|-------|
 | Internal field | `ConcurrentHashMap<String, List<ProviderConfig>>` | `ConcurrentHashMap<String, Map<String, ProviderConfig>>` |
-| `store(agentId, List<ProviderConfig>)` | Stores list directly | Converts List→Map keyed by providerName. Last-write-wins on duplicate providerName (log warning). |
+| `store(agentId, List<ProviderConfig>)` | Stores list directly | Converts List→Map keyed by providerName. Last-write-wins on duplicate providerName (log warning via JBoss Logging — add `@Inject Logger` field to `DeploymentProviderConfigStore`). |
 | `forAgent(agentId)` | Returns `List<ProviderConfig>` | Returns `Map<String, ProviderConfig>` (unmodifiable). `Map.of()` for unknown agents. |
 | `agentIds()` | Unchanged | Unchanged |
 | `remove(agentId)` | Unchanged | Unchanged |
@@ -40,7 +47,7 @@ The `store()` input signature stays as `List<ProviderConfig>` — callers pass L
 
 New class: `DeploymentProvisionerConfigRegistry` in `io.casehub.ops.deployment`.
 
-**Annotations:** `@Alternative @Priority(1) @ApplicationScoped`
+**Annotations:** `@ApplicationScoped`
 
 **Implements:** `ProvisionerConfigRegistry` (from `io.casehub.api.spi`)
 
@@ -55,11 +62,19 @@ Look up `store.forAgent(agentId).get(providerName)`. Return the config map if fo
 Iterate `store.agentIds()`, filter to those whose `forAgent()` map contains the providerName key,
 collect to unmodifiable Set.
 
+**Consistency model:** `declaredAgentIds` iterates `ConcurrentHashMap.keySet()` (weakly consistent)
+then calls `forAgent()` per agent. Between iteration and lookup, agents may be added or removed
+concurrently via `provision()`/`deprovision()`. The result is a point-in-time snapshot — acceptable
+for a config-lookup SPI consumed during provisioner initialization, but consumers must not assume
+strong consistency across the returned set.
+
 ### CDI Displacement
 
-`@Alternative @Priority(1)` auto-activates in Quarkus without `selected-alternatives` config
-(per GE-20260429-a79d0e). When ops-deployment is on the classpath, this displaces
-`NoOpProvisionerConfigRegistry @DefaultBean @ApplicationScoped` in engine-runtime.
+`NoOpProvisionerConfigRegistry` in engine-runtime is annotated `@DefaultBean @ApplicationScoped`.
+Per the platform's DefaultBean SPI convention (engine spec `2026-05-14-defaultbean-spi-noops-design`),
+any non-default qualifying bean for the same type automatically takes precedence. A plain
+`@ApplicationScoped` implementation is sufficient to displace the `@DefaultBean` no-op — no
+`@Alternative`, no `@Priority`, no configuration required.
 
 ## Testing
 
@@ -81,17 +96,38 @@ New `DeploymentProvisionerConfigRegistryTest` — unit tests with real `Deployme
 | `declaredAgentIds` — agents with given provider | Returns matching agent IDs |
 | `declaredAgentIds` — no agents with given provider | Returns `Set.of()` |
 
+### CDI Wiring Test (new)
+
+`@QuarkusTest` that injects `ProvisionerConfigRegistry` and asserts it resolves to
+`DeploymentProvisionerConfigRegistry`. Verifies the `@ApplicationScoped` annotation is correctly
+applied and CDI wiring is functional. Full displacement testing (NoOp vs Deployment with both on
+the classpath) is covered by consumer repo integration suites, per the DefaultBean SPI spec's
+testing decision.
+
 ### Existing Test Updates
 
-9 call sites across `AgentProvisionHandlerTest` and `DeploymentLifecycleIntegrationTest` need
-mechanical updates: `List` assertions → `Map` assertions (`.get(0)` → `.get("providerName")`,
-`.hasSize(1)` → `.containsKey("providerName")`, etc.).
+`forAgent()` currently has zero production callers — all call sites are in test code. The return
+type change (`List<ProviderConfig>` → `Map<String, ProviderConfig>`) has zero production impact.
 
-No CDI integration test for `@Alternative` displacement — that is Quarkus framework behavior.
+5 lines across `AgentProvisionHandlerTest` and `DeploymentLifecycleIntegrationTest` have compile
+failures requiring changes:
+
+| Location | Change |
+|----------|--------|
+| `provisionStoresProviderConfigs` — type declaration | `List<ProviderConfig>` → `Map<String, ProviderConfig>` |
+| `provisionStoresProviderConfigs` — extracting assertion | `extracting(ProviderConfig::providerName)` → Map key assertions |
+| `provisionStoresProviderConfigs` — `.get(0)` | `stored.get(0)` → `stored.get("claudony")` |
+| `provisionStoresProviderConfigs` — `.get(1)` | `stored.get(1)` → `stored.get("openclaw")` |
+| `fullLifecycle` — `.get(0)` | `.get(0)` → `.get("claudony")` |
+
+3 additional lines use `hasSize()` which works on both `List` and `Map` via AssertJ but should
+be updated for semantic clarity (e.g. `.containsKey("claudony")`). 1 line (`isEmpty()`) works
+identically on both types and needs no change.
 
 ## Scope Exclusions
 
 - No POM changes (engine-api already a dependency in deployment/pom.xml)
-- No reverse index on the store (agent count is small, O(n) iteration is fine)
+- No reverse index on the store — agent count is small, O(n) iteration is acceptable
+  (tracked: casehubio/casehub-ops#27)
 - No convenience methods beyond existing store API
 - `AgentNodeSpec.providerConfigs` stays as `List<ProviderConfig>` — the store boundary handles conversion
