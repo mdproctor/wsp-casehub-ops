@@ -18,8 +18,8 @@ displaced by a real implementation backed by the store.
 have zero call sites in the engine or consumer codebases. This spec implements the producer side
 (ops). Consumer migration is tracked via engine#584 which remains open until at least one consumer
 (Claudony, OpenClaw) migrates. claudony#164 was closed for the earlier `ProviderConfigSource` SPI,
-not `ProvisionerConfigRegistry` — a new Claudony issue is needed to track migration to the engine
-SPI. ops#24 remains open until this implementation is merged.
+not `ProvisionerConfigRegistry` — claudony#165 now tracks migration to the engine SPI.
+ops#24 remains open until this implementation is merged.
 
 ## Root Fix: Store Data Model
 
@@ -35,7 +35,7 @@ where the inner map is keyed by `providerName`. This makes the invariant structu
 | Method | Before | After |
 |--------|--------|-------|
 | Internal field | `ConcurrentHashMap<String, List<ProviderConfig>>` | `ConcurrentHashMap<String, Map<String, ProviderConfig>>` |
-| `store(agentId, List<ProviderConfig>)` | Stores list directly | Converts List→Map keyed by providerName. Last-write-wins on duplicate providerName (log warning via JBoss Logging — add `@Inject Logger` field to `DeploymentProviderConfigStore`). |
+| `store(agentId, List<ProviderConfig>)` | Stores list directly | Converts List→Map keyed by providerName. Last-write-wins on duplicate providerName (log warning via `private static final Logger LOG = Logger.getLogger(DeploymentProviderConfigStore.class)` — matches module's established static logger pattern). |
 | `forAgent(agentId)` | Returns `List<ProviderConfig>` | Returns `Map<String, ProviderConfig>` (unmodifiable). `Map.of()` for unknown agents. |
 | `agentIds()` | Unchanged | Unchanged |
 | `remove(agentId)` | Unchanged | Unchanged |
@@ -96,13 +96,20 @@ New `DeploymentProvisionerConfigRegistryTest` — unit tests with real `Deployme
 | `declaredAgentIds` — agents with given provider | Returns matching agent IDs |
 | `declaredAgentIds` — no agents with given provider | Returns `Set.of()` |
 
-### CDI Wiring Test (new)
+### Structural Verification Test (new)
 
-`@QuarkusTest` that injects `ProvisionerConfigRegistry` and asserts it resolves to
-`DeploymentProvisionerConfigRegistry`. Verifies the `@ApplicationScoped` annotation is correctly
-applied and CDI wiring is functional. Full displacement testing (NoOp vs Deployment with both on
-the classpath) is covered by consumer repo integration suites, per the DefaultBean SPI spec's
-testing decision.
+Plain JUnit test (no CDI bootstrap) that verifies `DeploymentProvisionerConfigRegistry` via
+reflection:
+- Has `@ApplicationScoped` annotation
+- Implements `ProvisionerConfigRegistry`
+- Has a constructor injectable by CDI (single constructor accepting `DeploymentProviderConfigStore`)
+
+This catches the most common CDI wiring failures (wrong annotation, wrong interface, unsatisfiable
+constructor) without requiring Quarkus container bootstrap. The deployment module has zero
+`@QuarkusTest` tests and 21 `@ApplicationScoped` beans — bootstrapping a container for a 2-bean
+test would require extensive `quarkus.arc.exclude-types` configuration. Full displacement testing
+(NoOp vs Deployment) is deferred to consumer repo integration suites when consumers migrate to
+`ProvisionerConfigRegistry` (tracked via engine#584).
 
 ### Existing Test Updates
 
