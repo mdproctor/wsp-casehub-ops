@@ -1,3 +1,5 @@
+*Updated: desiredstate#14, claudony#165 closed — removed from backlog.*
+
 # Handoff — casehub-ops
 
 ## Last Session
@@ -9,14 +11,12 @@ Pick next work. Consumer migration (Claudony → claudony#165, OpenClaw) is the 
 ## Cross-Module
 **Blocked by:**
 - `casehub-ras` — long-lived situation lifecycle + findAllActive() query (ras#20) blocks end-to-end adaptive ops demo · M · Med
-- `casehub-desiredstate` — ReconciliationLoop PendingApproval workflow (desiredstate#14) blocks ops#13 · M · Med
 
 **Enables:**
-- `claudony#165` — migrate Claudony to use ProvisionerConfigRegistry SPI
 - `engine#584` — remains open until at least one consumer migrates
 
 ## What's Left
-- ops#13 PendingApproval provisioner support — filed, blocked by desiredstate#14 · M · Med
+- ops#13 PendingApproval provisioner support — filed, unblocked (desiredstate#14 closed) · M · Med
 - ops#27 Reverse index for declaredAgentIds — filed, deferred (O(n) acceptable for now) · XS · Low
 - ras#20 long-lived situation lifecycle — filed, blocks adaptive ops demo · M · Med
 - desiredstate#49 SituationSource SPI — **shipped** (3 commits on desiredstate main, pushed)
@@ -27,10 +27,10 @@ Pick next work. Consumer migration (Claudony → claudony#165, OpenClaw) is the 
 |---|-------------|-------|------------|-------|
 | #10 | IoTFaultPolicy domain-specific fault responses | M | Med | Deferred — needs operational feedback |
 | #11 | DetectionNodeSpec — RAS situation registration | M | Med | Deferred — requires RAS declarative API |
-| #13 | PendingApproval provisioner support | M | Med | Blocked by desiredstate#14 |
+| #13 | PendingApproval provisioner support | M | Med | Unblocked — desiredstate#14 closed |
 | #15 | Deployment declarative topology demo | M | Med | Superseded by #25 adaptive ops demo |
 | #16 | Compliance continuous posture demo | M | Med | Unblocked — real EvidenceCollectors |
-| #17 | Infra Terraform augmentation demo | M | Med | Human gate blocked by desiredstate#14 |
+| #17 | Infra Terraform augmentation demo | M | Med | Unblocked — desiredstate#14 closed |
 | #18 | Real EvidenceCollector implementations | M | Med | Feeds #16, unblocked |
 | #19 | Integration test hardening | M | Low | Unblocked |
 | #20 | Multi-provisioner dispatch readiness | M | Med | Prep for desiredstate#18 |
