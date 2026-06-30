@@ -1,18 +1,23 @@
 # Handoff — casehub-ops
 
 ## Last Session
-Built and shipped adaptive ops — RAS-driven topology adaptation for casehub-ops-deployment. Deep research identified fsitrading and SOC as ideal first consumers. SituationSource SPI in desiredstate-api, AdaptiveTopologyManager in ops-deployment with hysteresis/cooldown/periodic re-poll, full adaptation rule stack (scale/add/update actions). Adversarial design review (12 issues, all resolved). 3 desiredstate commits + 12 ops commits on main. Garden entry GE-20260629-ba6ff8 (cross-repo subagent branch contamination).
+Implemented ProvisionerConfigRegistry (#24) — engine SPI backed by DeploymentProviderConfigStore. Fixed the store's data model (List→Map) to enforce one-config-per-provider-per-agent structurally. Plain @ApplicationScoped displaces NoOpProvisionerConfigRegistry @DefaultBean by classpath presence. Adversarial design review (15 issues, 12 verified, all resolved) corrected the CDI pattern from @Alternative @Priority(1) to @ApplicationScoped and caught 7 other spec improvements. 1 squashed commit on main (dfd8cc7).
 
 ## Immediate Next Step
-Pick next work. The adaptive ops infrastructure is complete but needs RAS long-lived situations (ras#20) before end-to-end demo. Options: start fsitrading or SOC implementation (both scaffolded), or pick from the roadmap (#18-23). Run `/work` to start.
+Pick next work. Consumer migration (Claudony → claudony#165, OpenClaw) is the natural follow-on — those repos need to call ProvisionerConfigRegistry.configFor() instead of passing config directly. Or pick from the roadmap. Run `/work` to start.
 
 ## Cross-Module
 **Blocked by:**
 - `casehub-ras` — long-lived situation lifecycle + findAllActive() query (ras#20) blocks end-to-end adaptive ops demo · M · Med
 - `casehub-desiredstate` — ReconciliationLoop PendingApproval workflow (desiredstate#14) blocks ops#13 · M · Med
 
+**Enables:**
+- `claudony#165` — migrate Claudony to use ProvisionerConfigRegistry SPI
+- `engine#584` — remains open until at least one consumer migrates
+
 ## What's Left
 - ops#13 PendingApproval provisioner support — filed, blocked by desiredstate#14 · M · Med
+- ops#27 Reverse index for declaredAgentIds — filed, deferred (O(n) acceptable for now) · XS · Low
 - ras#20 long-lived situation lifecycle — filed, blocks adaptive ops demo · M · Med
 - desiredstate#49 SituationSource SPI — **shipped** (3 commits on desiredstate main, pushed)
 
@@ -34,8 +39,9 @@ Pick next work. The adaptive ops infrastructure is complete but needs RAS long-l
 | #23 | Cross-domain dependency graphs | L | High | Needs design |
 | #25 | fsitrading adaptive ops — first consumer | L | High | Blocked by ras#20 |
 | #26 | SOC adaptive ops — second consumer | L | High | Blocked by ras#20 |
+| #27 | Reverse index for declaredAgentIds | XS | Low | Deferred optimisation |
 
 ## References
-- Design spec: `docs/superpowers/specs/2026-06-29-adaptive-ops-design.md`
-- Implementation plan: `docs/superpowers/plans/2026-06-29-adaptive-ops.md`
+- Design spec: `specs/issue-24-provisioner-config-registry/2026-06-29-provisioner-config-registry-design.md`
 - Architecture: `ARC42STORIES.MD`
+- Pause stack: issue-18-real-evidence-collectors (1 paused branch)
