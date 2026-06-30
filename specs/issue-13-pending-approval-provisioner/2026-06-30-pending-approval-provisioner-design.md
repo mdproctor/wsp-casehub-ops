@@ -163,14 +163,14 @@ REJECTED →  removed   (via acknowledgeRejection())
 
 - **`check()`**: Returns the stored state. `Approved` is NOT consumed on read — persists so failed provisions can retry on next reconciliation cycle. Stale approvals are harmless (provisioned nodes leave the plan) or detected by the provisioner (`originalSpec` mismatch).
 - **`recordPending()`**: Stores/replaces entry as PENDING. Returns `StepOutcome.Skipped`. Naturally supersedes any stale approval for the same key.
-- **`acknowledgeRejection()`**: Removes the entry entirely.
+- **`acknowledgeRejection()`**: Removes the entry entirely. Also removes the associated plan from `PlanStore` — the handler retrieves the `planReference` from the stored entry before removing it.
 
 #### External API (beyond the SPI)
 
-- `approve(nodeId, action, tenancyId, approvedBy)` — transitions PENDING → APPROVED, creates `PlanApproval`
-- `reject(nodeId, action, tenancyId, reason)` — transitions PENDING → REJECTED
+- `approve(nodeId, action, tenancyId, approvedBy)` → `boolean`. Transitions PENDING → APPROVED, creates `PlanApproval`. Returns `true` if transition succeeded. Returns `false` if no entry exists for the key or entry is not PENDING (already approved, rejected, or removed by a race). Safe to call multiple times — second call returns `false` with no side effects.
+- `reject(nodeId, action, tenancyId, reason)` → `boolean`. Transitions PENDING → REJECTED. Returns `true` if transition succeeded. Returns `false` if no entry exists or entry is not PENDING.
 
-These methods are the integration seam for WorkItem completion handlers, REST endpoints, or test code.
+These methods are the integration seam for WorkItem completion handlers, REST endpoints, or test code. The `boolean` return allows callers to distinguish success from no-op (e.g., REST endpoints can return 200 vs 409, WorkItem handlers can log and ignore).
 
 #### Implementation details
 
@@ -205,7 +205,7 @@ provision(node, context):
   storedPlan = planStore.retrieve(approval.planReference())
 
   if storedPlan absent → strip approval, re-evaluate from scratch
-  if !storedPlan.originalSpec().equals(node.spec()) → spec changed, re-evaluate
+  if !storedPlan.originalSpec().equals(node.spec()) → planStore.remove(approval.planReference()), re-evaluate
   otherwise → doProvision(spec, context)
     on Success → planStore.remove(approval.planReference()), return Success
     on Failed → return Failed (plan retained for retry on next cycle)
@@ -213,7 +213,12 @@ provision(node, context):
 
 The stale-approval guard prevents an old approval from authorising a different change. If the spec changed between plan generation and re-entry, the provisioner re-evaluates risk and may issue a new `PendingApproval`. Provisioners use pattern matching (`storedPlan.detail() instanceof ProvisionPlan plan`) for type-safe retrieval of domain-specific plan data — never blind casting.
 
-**Cleanup:** On successful provision, the plan is removed from `PlanStore`. The handler's approval entry is bounded (at most one per `(nodeId, action, tenancyId)` triple) and naturally superseded by `recordPending()` if the node requires re-approval later — no explicit handler cleanup is needed.
+**Cleanup — three paths remove plans from `PlanStore`:**
+1. **Success:** provisioner calls `planStore.remove()` after successful provision.
+2. **Rejection:** `acknowledgeRejection()` removes the plan when clearing the handler entry.
+3. **Stale spec on re-entry:** provisioner calls `planStore.remove()` before re-evaluating with the changed spec.
+
+The handler's approval entry is bounded (at most one per `(nodeId, action, tenancyId)` triple) and naturally superseded by `recordPending()` if the node requires re-approval later — no explicit handler entry cleanup beyond `acknowledgeRejection()` is needed.
 
 #### Deprovision
 
@@ -287,7 +292,7 @@ All callers update imports. No wrappers or backward-compatibility shims.
 ### 6. Testing approach
 
 **Unit — shared types and handler:**
-- `OpsPendingApprovalHandler`: state transitions (pending→approved→check, pending→rejected→acknowledge→removed), duplicate recordPending replaces old entry, concurrent access
+- `OpsPendingApprovalHandler`: state transitions (pending→approved→check, pending→rejected→acknowledge→removed), duplicate recordPending replaces old entry, concurrent access, approve/reject return false when no entry or wrong state, acknowledgeRejection removes associated plan from PlanStore
 - `ApprovalThresholds.requiresApproval()`: boundary conditions per risk level
 - `InMemoryPlanStore`: store/retrieve/remove, missing key returns empty
 
