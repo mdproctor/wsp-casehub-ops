@@ -1,25 +1,28 @@
-*Updated: desiredstate#14, claudony#165 closed — removed from backlog.*
+*Updated: casehub-ras#22 cross-repo migration — situation types moved from desiredstate-api to ras-api.*
 
 # Handoff — casehub-ops
 
 ## Last Session
-Implemented ProvisionerConfigRegistry (#24) — engine SPI backed by DeploymentProviderConfigStore. Fixed the store's data model (List→Map) to enforce one-config-per-provider-per-agent structurally. Plain @ApplicationScoped displaces NoOpProvisionerConfigRegistry @DefaultBean by classpath presence. Adversarial design review (15 issues, 12 verified, all resolved) corrected the CDI pattern from @Alternative @Priority(1) to @ApplicationScoped and caught 7 other spec improvements. 1 squashed commit on main (dfd8cc7).
+Migrated situation types (ActiveSituation, SituationSource, SituationChangeEvent) from desiredstate-api to ras-api (casehub-ras#22). Updated ops-deployment imports, expanded record constructors (4→8 and 1→4 fields), reactive SituationSource signature (List→Uni<List>). Branch `issue-22-move-situation-types` pushed (a3c2728).
 
 ## Immediate Next Step
-Pick next work. Consumer migration (Claudony → claudony#165, OpenClaw) is the natural follow-on — those repos need to call ProvisionerConfigRegistry.configFor() instead of passing config directly. Or pick from the roadmap. Run `/work` to start.
+Pre-existing build failures in ops-deployment need fixing before merging:
+1. `ChannelDriftChecker` — imports reference `io.casehub.qhorus.api.store` which doesn't exist yet (uncommitted change on `issue-13-pending-approval-provisioner` branch)
+2. `AgentProvisionHandlerTest` — `AgentCapability` constructor gained a new field
+
+Pick next work or fix the pre-existing failures. Run `/work` to start.
 
 ## Cross-Module
 **Blocked by:**
-- `casehub-ras` — long-lived situation lifecycle + findAllActive() query (ras#20) blocks end-to-end adaptive ops demo · M · Med
+- Pre-existing build failures (see above) block full `mvn install`
 
 **Enables:**
-- `engine#584` — remains open until at least one consumer migrates
+- `casehub-ras#22` — this was the ops-side of the cross-repo migration
 
 ## What's Left
 - ops#13 PendingApproval provisioner support — filed, unblocked (desiredstate#14 closed) · M · Med
 - ops#27 Reverse index for declaredAgentIds — filed, deferred (O(n) acceptable for now) · XS · Low
-- ras#20 long-lived situation lifecycle — filed, blocks adaptive ops demo · M · Med
-- desiredstate#49 SituationSource SPI — **shipped** (3 commits on desiredstate main, pushed)
+- Pre-existing build failures — ChannelDriftChecker, AgentProvisionHandlerTest
 
 ## What's Next
 
@@ -37,8 +40,8 @@ Pick next work. Consumer migration (Claudony → claudony#165, OpenClaw) is the 
 | #21 | Reconciliation scheduling metadata | S | Low | Prep for desiredstate#19 |
 | #22 | Deployment drift remediation strategies | M | High | Needs design |
 | #23 | Cross-domain dependency graphs | L | High | Needs design |
-| #25 | fsitrading adaptive ops — first consumer | L | High | Blocked by ras#20 |
-| #26 | SOC adaptive ops — second consumer | L | High | Blocked by ras#20 |
+| #25 | fsitrading adaptive ops — first consumer | L | High | ras#22 unblocked |
+| #26 | SOC adaptive ops — second consumer | L | High | ras#22 unblocked |
 | #27 | Reverse index for declaredAgentIds | XS | Low | Deferred optimisation |
 
 ## References
