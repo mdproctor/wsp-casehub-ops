@@ -1,9 +1,9 @@
-*Updated: casehub-ras#22 cross-repo migration — situation types moved from desiredstate-api to ras-api.*
+*Updated: ADR round 1 implementor response — ops#13 pending approval provisioner design review.*
 
 # Handoff — casehub-ops
 
 ## Last Session
-Migrated situation types (ActiveSituation, SituationSource, SituationChangeEvent) from desiredstate-api to ras-api (casehub-ras#22). Updated ops-deployment imports, expanded record constructors (4→8 and 1→4 fields), reactive SituationSource signature (List→Uni<List>). Branch `issue-22-move-situation-types` pushed (a3c2728).
+ADR design review (round 1 implementor) for ops#13 PendingApproval provisioner spec. Updated spec on branch `issue-13-pending-approval-provisioner` (2c70dbb): removed `requireSecondReviewer`, replaced `specHash` with `originalSpec`, added plan cleanup, pattern matching for PlanDetail, documented module placement and performance implications. Filed ops#32 for approval trigger mechanism.
 
 ## Immediate Next Step
 Pre-existing build failures in ops-deployment need fixing before merging:
