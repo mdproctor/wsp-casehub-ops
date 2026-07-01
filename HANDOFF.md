@@ -1,3 +1,5 @@
+*Updated: ras#20 closed — removed as blocker. #25, #26 unblocked.*
+
 # Handoff — casehub-ops
 
 ## Last Session
@@ -7,9 +9,6 @@ Closed #27 (reverse index) and #28 (requiresHuman unification). Unified four org
 Pick next work. #32 (approval trigger — WorkItem/REST for approve/reject) is the natural follow-on. Or pick from the roadmap. Run `/work` to start.
 
 ## Cross-Module
-**Blocked by:**
-- `casehub-ras` — long-lived situation lifecycle + findAllActive() query (ras#20) blocks end-to-end adaptive ops demo · M · Med
-
 **Enables:**
 - `engine#584` — remains open until at least one consumer migrates
 
@@ -18,7 +17,6 @@ Pick next work. #32 (approval trigger — WorkItem/REST for approve/reject) is t
 - desiredstate#54 Add requiresHuman gating to executeDeprovision + onDeprovision() · S · Low
 - desiredstate#55 Update dungeon example to use spec-level requiresHuman() · XS · Low
 - parent#337 Sync PLATFORM.md for NodeSpec.requiresHuman() and reverse index · XS · Low
-- ras#20 long-lived situation lifecycle — blocks adaptive ops demo · M · Med
 - Pause stack: issue-18-real-evidence-collectors (1 paused branch)
 
 ## What's Next
@@ -32,8 +30,8 @@ Pick next work. #32 (approval trigger — WorkItem/REST for approve/reject) is t
 | #17 | Infra Terraform augmentation demo | M | Med | Unblocked |
 | #18 | Real EvidenceCollector implementations | M | Med | Paused branch exists |
 | #19 | Integration test hardening | M | Low | Unblocked |
-| #25 | fsitrading adaptive ops | L | High | Blocked by ras#20 |
-| #26 | SOC adaptive ops | L | High | Blocked by ras#20 |
+| #25 | fsitrading adaptive ops | L | High | Unblocked — ras#20 closed |
+| #26 | SOC adaptive ops | L | High | Unblocked — ras#20 closed |
 
 ## References
 - Design spec: `docs/specs/issue-27-reverse-index-requires-human/2026-07-01-reverse-index-requires-human-design.md`
