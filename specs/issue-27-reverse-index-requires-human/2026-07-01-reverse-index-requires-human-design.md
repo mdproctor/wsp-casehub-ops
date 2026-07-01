@@ -76,12 +76,7 @@ ASSUMPTION: Java records permit overriding auto-generated accessor methods (JLS 
 
 `requiresHumanReview` stays as the record field (domain-specific name). The override satisfies the generic contract.
 
-**InfraDesiredNodeSpec** — wrapper delegation:
-```java
-@Override public boolean requiresHuman() { return resourceSpec.requiresHuman(); }
-```
-
-Without this, the wrapper swallows the inner spec's answer.
+**InfraDesiredNodeSpec** — no override needed. `InfraNodeSpec` does not extend `NodeSpec` (by design — ARC42STORIES.MD §Layer L1), so there is no inner `requiresHuman()` to delegate to. Inherits the default `false`. If a future infra resource type needs human provisioning, the GoalCompiler passes `true` as the author-level override; OR composition handles it automatically.
 
 ### GoalCompiler unification
 
@@ -157,7 +152,6 @@ Returns `Set.copyOf(set)` — an immutable point-in-time snapshot. Callers never
 ### casehub-ops
 - `api/.../iot/PhysicalDeviceSpec.java` — override `requiresHuman()` → true
 - `api/.../compliance/ComplianceControlSpec.java` — override `requiresHuman()` → `requiresHumanReview()`
-- `api/.../infra/InfraDesiredNodeSpec.java` — override `requiresHuman()` → delegate to inner spec
 - `compliance/.../ComplianceGoalCompiler.java` — `spec.requiresHumanReview()` → `false` (spec composes via OR)
 - `iot/.../IoTGoalCompiler.java` — conditional `true`/`false` → `false` (spec composes via OR)
 - `iot/.../IoTNodeProvisioner.java` — remove dead provision branch, fix deprovision to Success
