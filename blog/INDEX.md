@@ -12,3 +12,4 @@
 | [2026-06-26-mdp01-deployment-endpoint-topology.md](2026-06-26-mdp01-deployment-endpoint-topology.md) | 2026-06-26 | Filling the topology gap — EndpointNodeSpec as 5th deployment node type, EndpointRegistry integration |
 | [2026-06-28-mdp01-abstraction-that-hid-a-bug.md](2026-06-28-mdp01-abstraction-that-hid-a-bug.md) | 2026-06-28 | ChannelDriftChecker enrichment — functional interface abstraction masking tenancy parameter, cross-repo issue sweep |
 | [2026-06-29-mdp01-adaptive-ops-topology-responds.md](2026-06-29-mdp01-adaptive-ops-topology-responds.md) | 2026-06-29 | Adaptive ops — RAS-driven topology adaptation, fsitrading and SOC as first consumers, SituationSource SPI, cross-repo branch contamination |
+| [2026-07-01-mdp01-two-mechanisms-not-one.md](2026-07-01-mdp01-two-mechanisms-not-one.md) | 2026-07-01 | PendingApproval provisioner support — two separate runtime approval paths, shared types, stale-approval guard, ConcurrentHashMap race |
