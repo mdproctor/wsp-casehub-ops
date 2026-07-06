@@ -1,3 +1,5 @@
+*Updated: parent#337 closed — removed from What's Left.*
+
 # Handoff — casehub-ops
 
 ## Last Session
@@ -18,7 +20,6 @@ Continue on branch `issue-29-service-lifecycle-ops-console`. Write the Phase 2 p
 - ops#39 K8sDeploymentSpec extension + K8sConfigMapSpec — **DONE** (committed on branch, not yet on main) · S · Low
 - desiredstate#54 requiresHuman gating for deprovision · S · Low
 - desiredstate#55 Update dungeon example · XS · Low
-- parent#337 Sync PLATFORM.md · XS · Low
 - Pause stack: issue-18-real-evidence-collectors (1 paused branch)
 - Project main has design review commits ahead of origin/main — push needed
 
