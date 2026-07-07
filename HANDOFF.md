@@ -7,8 +7,7 @@ Closed #29 (Phase 1 + Phase 2) and #39. Built the ops console app module — Qua
 Pick next work. #25 (fsitrading adaptive ops) or #26 (SOC adaptive ops) are natural follow-ons — first real consumers. Or pick from the roadmap. Run `/work` to start.
 
 ## Cross-Module
-**Enables:**
-- `engine#584` — remains open until at least one consumer migrates
+*None currently.*
 
 ## What's Left
 - desiredstate#54 requiresHuman gating for deprovision · S · Low
