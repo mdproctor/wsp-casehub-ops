@@ -1,5 +1,5 @@
-# Branch Closed: issue-14-channel-drift-checker-enrichment
+# Branch Closed: issue-18-real-evidence-collectors
 
-**Date:** 2026-06-28
-**Issues:** 14
+**Date:** 2026-07-07
+**Issues:** 18
 **Status:** merged to main
