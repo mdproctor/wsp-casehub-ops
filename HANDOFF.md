@@ -1,3 +1,5 @@
+*Updated: desiredstate#55 closed — removed from backlog.*
+
 # Handoff — casehub-ops
 
 ## Last Session
@@ -11,8 +13,6 @@ Pick next work. #16 (compliance demo) is the natural follow-on — real evidence
 
 ## What's Left
 - desiredstate#54 requiresHuman gating for deprovision · S · Low
-- desiredstate#55 Update dungeon example · XS · Low
-- deployment module pre-existing compile failure (ChannelProvisionHandler references unavailable qhorus Channel classes)
 
 ## What's Next
 
