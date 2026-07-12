@@ -1,5 +1,5 @@
-# Branch Closed: issue-18-real-evidence-collectors
+# Branch Closed: issue-40-active-k8s-eventsource
 
-**Date:** 2026-07-07
-**Issues:** 18
+**Date:** 2026-07-12
+**Issues:** 40,41,46
 **Status:** merged to main
