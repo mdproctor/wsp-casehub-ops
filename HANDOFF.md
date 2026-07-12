@@ -1,18 +1,17 @@
-*Updated: desiredstate#55 closed — removed from backlog.*
-
 # Handoff — casehub-ops
 
 ## Last Session
-Closed #18 — real EvidenceCollector implementations. Replaced 6 stub collectors with 4 strategy-based implementations (FileExistence, LogDirectory, CertificateExpiry, ConfigHash). SPI change: controlType()→strategy() separates compliance domain from verification method. Safety-net catch in ComplianceEvidenceService. Also fixed ledger API migration (runtime→api), FaultPolicy 2→3 arg and GoalCompiler→CompilationResult across compliance, infra, iot. 344 tests green.
+Closed #36 (drift-remediation child case with full case model infrastructure), #44 (pluggable credential resolver), #42 (FaultPolicy 3-arg — already done). Built Phase 3 foundation: ApplicationCaseDescriptor with 6 bindings, CaseDefinitionRegistrar, DriftRemediationCaseDescriptor with classify/remediate/escalate workers, DriftSignalBridge (NODE_DRIFTED CloudEvent observer), DriftConvergenceHandler (NODE_RECOVERED convergence), K8sResourceHandler.readDiff() refactor, CredentialResolver wired into K8sClientRegistry with per-cluster trustCerts. Design-reviewed (2 rounds, 18 issues all resolved). 166 tests green. Filed #51 (credential rotation deferred).
 
 ## Immediate Next Step
-Pick next work. #16 (compliance demo) is the natural follow-on — real evidence collection is now available. Or #25/#26 (adaptive ops consumers), or quick wins from #40–#46. Run `/work` to start.
+Pick next work. #16 (compliance demo) and #17 (infra demo) can now use the case model. #25/#26 (adaptive ops consumers) can leverage drift detection infrastructure. Quick wins from #40–#46 still available. Run `/work` to start.
 
 ## Cross-Module
 *None currently.*
 
 ## What's Left
 - desiredstate#54 requiresHuman gating for deprovision · S · Low
+- #51 credential rotation/expiration handling in K8sClientRegistry · S · Med
 
 ## What's Next
 
@@ -20,17 +19,15 @@ Pick next work. #16 (compliance demo) is the natural follow-on — real evidence
 |---|-------------|-------|------------|-------|
 | #40 | Active KubernetesEventSource (fabric8 Watch) | M | Med | Real-time drift detection |
 | #41 | InfraBackend.readState should accept InfraNodeSpec | S | Low | API fix |
-| #42 | FaultPolicy 2→3 arg migration | XS | Low | Partially done (compliance/infra/iot fixed, deployment pending) |
 | #43 | Approval workflow for provisioning | M | Med | Phase 3 |
-| #44 | Pluggable credential resolver | S | Med | Enhancement |
 | #45 | K8s-aware FaultPolicy responses | M | Med | Needs operational feedback |
 | #46 | Minor findings batch | S | Low | Code hygiene |
 | #25 | fsitrading adaptive ops | L | High | First real consumer |
 | #26 | SOC adaptive ops | L | High | Second consumer |
-| #16 | Compliance demo | M | Med | Unblocked — real EvidenceCollectors now available |
+| #16 | Compliance demo | M | Med | Unblocked — case model + real EvidenceCollectors |
 | #17 | Infra demo | M | Med | Unblocked |
 | #19 | Integration test hardening | M | Low | Unblocked |
 
 ## References
-- Design spec: `docs/superpowers/specs/2026-06-29-real-evidence-collectors-design.md`
+- Design spec: `docs/superpowers/specs/2026-07-10-drift-credential-faultpolicy-design.md`
 - Architecture: `ARC42STORIES.MD`
