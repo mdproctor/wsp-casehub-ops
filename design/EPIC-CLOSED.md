@@ -1,5 +1,5 @@
-# Branch Closed: issue-18-real-evidence-collectors
+# Branch Closed: issue-36-drift-credential-faultpolicy
 
-**Date:** 2026-07-07
-**Issues:** 18
+**Date:** 2026-07-12
+**Issues:** 36,44,42
 **Status:** merged to main
