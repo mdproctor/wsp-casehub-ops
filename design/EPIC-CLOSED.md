@@ -1,5 +1,5 @@
-# Branch Closed: issue-40-active-k8s-eventsource
+# Branch Closed: issue-55-reactive-401-credential-refresh
 
-**Date:** 2026-07-12
-**Issues:** 40,41,46
+**Date:** 2026-07-14
+**Issues:** 55
 **Status:** merged to main
