@@ -1,16 +1,17 @@
 # Handoff — casehub-ops
 
 ## Last Session
-Closed 4 S/XS issues: #52 (FaultPolicy tenancyId migration — 4 domain modules), #55 (reactive 401 credential refresh via K8sClientRegistry.withRetryOn401), #53+#54 (ScalingPolicy with min/max bounds clamping and cooldown enforcement in evaluateScaling worker). Also fixed pre-existing compile errors in deployment and IoT modules. 3 commits on main.
+Fixed CI (#57): CDI wiring for 3 new desiredstate SPI beans — SituationRecompilerEngine (List producer + stub), CdiActualStateAdapterRouter and CdiMergedEventSource (app-level replacements with no-args constructors, upstream Cdi* excluded). Build green, 249 tests pass.
 
 ## Immediate Next Step
-Pick next work. #25/#26 (adaptive ops consumers) can leverage real-time drift + scaling infrastructure. #16 (compliance demo) and #17 (infra demo) are unblocked. Run `/work` to start.
+Pick next work. #43 (approval workflow) is still open. #25/#26 (adaptive ops consumers) can leverage real-time drift + scaling infrastructure. #16 (compliance demo) and #17 (infra demo) are unblocked. Run `/work` to start.
 
 ## Cross-Module
 *None currently.*
 
 ## What's Left
 - desiredstate#54 requiresHuman gating for deprovision · S · Low
+- desiredstate: Cdi* bridge classes need no-args constructors upstream (currently worked around via app-level replacements + exclude-types)
 
 ## What's Next
 
