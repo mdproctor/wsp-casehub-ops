@@ -1,19 +1,17 @@
 # Handoff — casehub-ops
 
 ## Last Session
-Implemented #43 (approval workflow for provisioning operations — Phase 3). Deleted in-memory OpsPendingApprovalHandler, activated platform's WorkItemPendingApprovalHandler via casehub-desiredstate-work dependency. K8sApprovalEvaluator classifies risk by NodeType×StepAction (namespace deletion CRITICAL, deployment deprovision HIGH). KubernetesNodeProvisioner gains approval flow with re-entry and stale-spec detection. ApprovalResource REST API with tenancy isolation and immediate reconciliation trigger. Design reviewed adversarially (3 rounds, 12 issues). Build green, 296 app tests pass.
+Implemented #59, #60, #61, #62 on one branch (issue-59-approval-and-cdi-fixes). Fixed upstream desiredstate CDI bridge classes (#84), removed App* workaround in ops. Added JPA-backed PlanStore with Jackson mixins for polymorphic spec serialization. K8sApprovalEvaluator now classifies risk by namespace context (configurable critical/production lists). ApprovalAuthorizer SPI with role-based gates wired into ApprovalResource. Squashed and pushed to upstream. 838 tests green before squash. Cross-repo: desiredstate#84 on branch `issue-84-cdi-no-args-constructors` — needs push to upstream.
 
 ## Immediate Next Step
-Pick next work. #25/#26 (adaptive ops consumers) can now exercise end-to-end scaling with approval gates. #16/#17 (demos) are unblocked. Run `/work` to start.
+Push desiredstate#84 to upstream (`git -C ~/claude/casehub/desiredstate push upstream issue-84-cdi-no-args-constructors`), then pick next work. #25 (fsitrading adaptive ops) is the natural next — all scaling + approval infrastructure now in place. Run `/work` to start.
 
 ## What's Left
-- desiredstate#54 requiresHuman gating for deprovision · S · Low
-- desiredstate: Cdi* bridge classes need no-args constructors upstream (currently worked around via app-level replacements + exclude-types)
-- Persistent PlanStore (InMemoryPlanStore loses plan data on restart — provisioner re-evaluates gracefully but human re-approves) · S · Med
-- Context-aware K8s risk classification (prod namespace = CRITICAL, dev = LOW) · S · Med
-- Fine-grained approval authorization (role-based gates for CRITICAL operations) · S · Med
+- desiredstate#84 branch needs push to upstream (local only) · XS · Low
 - 11 unstamped closed branches (pre-existing hygiene debt)
-- 1 unrecovered blog on closed branch issue-29 (2026-07-06-mdp01-everything-is-a-case.md)
+- 1 unrecovered blog on closed branch issue-29
+- Pre-existing: @QuarkusTest + H2 + Hibernate 6.6 JOINED inheritance DDL failure (GE-20260718-d18dc0)
+- ARC42STORIES.MD not yet synced for #43 approval workflow additions · S · Low
 
 ## What's Next
 
@@ -28,5 +26,5 @@ Pick next work. #25/#26 (adaptive ops consumers) can now exercise end-to-end sca
 
 ## References
 - Architecture: `ARC42STORIES.MD`
-- Design spec: `docs/specs/2026-07-18-approval-workflow-design.md`
-- Blog: `blog/2026-07-18-mdp01-handler-that-shouldnt-exist.md`
+- Blog: `blog/2026-07-19-mdp01-four-fixes-one-branch.md`
+- Garden: GE-20260718-d18dc0 (H2/Hibernate JOINED inheritance gotcha), GE-20260719-1309d7 (Jackson mixin technique)
