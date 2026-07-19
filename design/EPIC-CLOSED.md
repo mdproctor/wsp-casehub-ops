@@ -1,5 +1,5 @@
-# Branch Closed: issue-40-active-k8s-eventsource
+# Branch Closed: issue-59-approval-and-cdi-fixes
 
-**Date:** 2026-07-12
-**Issues:** 40,41,46
+**Date:** 2026-07-19
+**Issues:** 59,60,61,62
 **Status:** merged to main
