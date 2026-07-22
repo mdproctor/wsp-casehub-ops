@@ -1,23 +1,23 @@
 # Handoff — casehub-ops
 
 ## Last Session
-Implemented #59, #60, #61, #62 on one branch (issue-59-approval-and-cdi-fixes). Fixed upstream desiredstate CDI bridge classes (#84), removed App* workaround in ops. Added JPA-backed PlanStore with Jackson mixins for polymorphic spec serialization. K8sApprovalEvaluator now classifies risk by namespace context (configurable critical/production lists). ApprovalAuthorizer SPI with role-based gates wired into ApprovalResource. Squashed and pushed to upstream. 838 tests green before squash. Cross-repo: desiredstate#84 on branch `issue-84-cdi-no-args-constructors` — needs push to upstream.
+Closed 4 S-scale issues on branch issue-10-s-issues-batch. IoTFaultPolicy: PROVISION_FAILED escalation (3 failures → iot-review node with HumanGating.ALL → WorkItem). ComplianceNodeProvisioner.resyncInterval() → 1 hour. #20 and #48 closed as already done (multi-provisioner dispatch and RAS migration shipped in prior sessions). ARC42STORIES.MD synced for #43 approval workflow and #10/#21 journal merge. CI fixed (re-run after desiredstate#84 deployed). PR#63 open for upstream.
 
 ## Immediate Next Step
-Push desiredstate#84 to upstream (`git -C ~/claude/casehub/desiredstate push upstream issue-84-cdi-no-args-constructors`), then pick next work. #25 (fsitrading adaptive ops) is the natural next — all scaling + approval infrastructure now in place. Run `/work` to start.
+Check PR#63 CI status. If green, merge. Then pick next work — #25 (fsitrading adaptive ops) is the natural next.
 
 ## What's Left
-- desiredstate#84 branch needs push to upstream (local only) · XS · Low
-- 11 unstamped closed branches (pre-existing hygiene debt)
-- 1 unrecovered blog on closed branch issue-29
+- PR#63 pending merge to upstream · XS · Low
+- jackson-jq dependency convergence (desiredstate 1.6.0 vs platform-expression 1.0.0) — needs parent POM fix · S · Low
+- 9 unstamped closed branches (pre-existing hygiene debt)
+- 1 unrecovered spec on closed branch issue-27 · XS · Low
 - Pre-existing: @QuarkusTest + H2 + Hibernate 6.6 JOINED inheritance DDL failure (GE-20260718-d18dc0)
-- ARC42STORIES.MD not yet synced for #43 approval workflow additions · S · Low
 
 ## What's Next
 
 | # | Description | Scale | Complexity | Notes |
 |---|-------------|-------|------------|-------|
-| #25 | fsitrading adaptive ops | L | High | First real consumer — all scaling + approval infrastructure now in place |
+| #25 | fsitrading adaptive ops | L | High | First real consumer — all scaling + approval infrastructure in place |
 | #26 | SOC adaptive ops | L | High | Second consumer |
 | #16 | Compliance demo | M | Med | Unblocked — case model + real EvidenceCollectors |
 | #17 | Infra demo | M | Med | Unblocked |
@@ -26,5 +26,5 @@ Push desiredstate#84 to upstream (`git -C ~/claude/casehub/desiredstate push ups
 
 ## References
 - Architecture: `ARC42STORIES.MD`
-- Blog: `blog/2026-07-19-mdp01-four-fixes-one-branch.md`
-- Garden: GE-20260718-d18dc0 (H2/Hibernate JOINED inheritance gotcha), GE-20260719-1309d7 (Jackson mixin technique)
+- PR: casehubio/casehub-ops#63
+- Garden: GE-20260718-d18dc0 (H2/Hibernate JOINED inheritance), GE-20260706-2ac0db (FaultPolicy CDI wiring)
