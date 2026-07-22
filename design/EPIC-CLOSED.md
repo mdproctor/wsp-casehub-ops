@@ -1,5 +1,5 @@
-# Branch Closed: issue-40-active-k8s-eventsource
+# Branch Closed: issue-10-s-issues-batch
 
-**Date:** 2026-07-12
-**Issues:** 40,41,46
+**Date:** 2026-07-22
+**Issues:** 10,20,21,48
 **Status:** merged to main
