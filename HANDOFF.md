@@ -1,10 +1,10 @@
 # Handoff — casehub-ops
 
 ## Last Session
-Closed 4 S-scale issues on branch issue-10-s-issues-batch. IoTFaultPolicy: PROVISION_FAILED escalation (3 failures → iot-review node with HumanGating.ALL → WorkItem). ComplianceNodeProvisioner.resyncInterval() → 1 hour. #20 and #48 closed as already done (multi-provisioner dispatch and RAS migration shipped in prior sessions). ARC42STORIES.MD synced for #43 approval workflow and #10/#21 journal merge. CI fixed (re-run after desiredstate#84 deployed). PR#63 open for upstream.
+Closed #45 on branch issue-45-k8s-faultpolicy-graph-mut. Extracted ThresholdFaultPolicy as a reusable count-based escalation component in casehub-desiredstate-api. Refactored IoTFaultPolicy to delegate (existing tests pass unchanged). Implemented KubernetesFaultPolicy — K8s resources escalate to human review after 3 PROVISION_FAILED events. API hardened: FaultEvent.detail and StepOutcome reason fields now reject null. Also migrated WorkerFunction.Sync (2→3 arg) and SettingsScope.root(tenancyId) across ops. Design review (4 rounds, $4.88) renamed component from EscalatingFaultPolicy to ThresholdFaultPolicy and moved it from runtime to api module. 3 garden entries submitted.
 
 ## Immediate Next Step
-Check PR#63 CI status. If green, merge. Then pick next work — #25 (fsitrading adaptive ops) is the natural next.
+PR#63 is still open from the prior session (CI was red). Check its status — if still failing, investigate and fix.
 
 ## What's Left
 - PR#63 pending merge to upstream · XS · Low
@@ -12,19 +12,23 @@ Check PR#63 CI status. If green, merge. Then pick next work — #25 (fsitrading 
 - 9 unstamped closed branches (pre-existing hygiene debt)
 - 1 unrecovered spec on closed branch issue-27 · XS · Low
 - Pre-existing: @QuarkusTest + H2 + Hibernate 6.6 JOINED inheritance DDL failure (GE-20260718-d18dc0)
+- Pre-existing: InfraBackend SPI changed upstream (blocking → reactive) — infra module doesn't compile · M · Med
+- Pre-existing: app module test compilation failures from WorkerFunction.Sync raw type issues · S · Low
 
 ## What's Next
 
 | # | Description | Scale | Complexity | Notes |
 |---|-------------|-------|------------|-------|
-| #25 | fsitrading adaptive ops | L | High | First real consumer — all scaling + approval infrastructure in place |
+| #64 | InfraFaultPolicy adoption of ThresholdFaultPolicy | S | Low | Unblocked by #45 — strong candidate per spec |
+| #65 | DeploymentFaultPolicy evaluation | S | Med | Needs design — one-shot registrations |
+| #25 | fsitrading adaptive ops | L | High | First real consumer |
 | #26 | SOC adaptive ops | L | High | Second consumer |
-| #16 | Compliance demo | M | Med | Unblocked — case model + real EvidenceCollectors |
-| #17 | Infra demo | M | Med | Unblocked |
-| #45 | K8s-aware FaultPolicy responses | M | Med | Needs operational feedback |
+| #16 | Compliance demo | M | Med | Unblocked |
+| #17 | Infra demo | M | Med | Blocked by InfraBackend SPI fix |
 | #19 | Integration test hardening | M | Low | Unblocked |
 
 ## References
 - Architecture: `ARC42STORIES.MD`
-- PR: casehubio/casehub-ops#63
-- Garden: GE-20260718-d18dc0 (H2/Hibernate JOINED inheritance), GE-20260706-2ac0db (FaultPolicy CDI wiring)
+- Spec: `docs/specs/2026-07-23-k8s-faultpolicy-escalation-design.md`
+- Garden: GE-20260724-ce18be (SettingsScope.root tenancyId), GE-20260724-b3e9a6 (WorkerFunction.Sync), GE-20260724-20ab99 (api vs runtime placement)
+- Cross-repo: desiredstate branch `issue-45-threshold-fault-policy` (closed, landed)
