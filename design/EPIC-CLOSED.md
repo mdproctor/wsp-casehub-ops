@@ -1,5 +1,5 @@
-# Branch Closed: issue-40-active-k8s-eventsource
+# Branch Closed: issue-45-k8s-faultpolicy-graph-mut
 
-**Date:** 2026-07-12
-**Issues:** 40,41,46
+**Date:** 2026-07-25
+**Issues:** 45
 **Status:** merged to main
