@@ -1,14 +1,13 @@
 # Handoff — casehub-ops
 
 ## Last Session
-Closed #64, #65, #66 on branch issue-66-upstream-api-adaptation. Fixed all compile errors from upstream API evolution (AgentDescriptor templates/goals/constraints, blocking SPI migration, jackson-jq convergence). Adopted ThresholdFaultPolicy in InfraFaultPolicy (8 node types) and DeploymentFaultPolicy (5 node types) — both escalate to human-review nodes after 3 PROVISION_FAILED events. Stamped 9 pre-existing unstamped closed branches. Recovered spec from issue-27 branch.
+Fixed CI (#67) — adapted IoT tests to upstream blocking SPI migration (iot#78, iot#79). Also fixed casehub-desiredstate CI (#92) — stale `Uni.await()` in SituationDetectionTest was blocking SNAPSHOT publication. Created and landed slot 40 (#93) — eliminated all time-sensitive test patterns across desiredstate and ops.
 
 ## Immediate Next Step
-All S/XS issues and pre-existing compile failures are resolved. Pick up next priority work with `/work`.
+CI is green. All housekeeping resolved. Pick up next priority work with `/work`.
 
 ## What's Left
 - Pre-existing: @QuarkusTest + H2 + Hibernate 6.6 JOINED inheritance DDL failure (GE-20260718-d18dc0) — handled via @Disabled, needs TestContainers migration
-- Pre-existing: IoT SPIs (DeviceProvider, DeviceRegistry) not yet migrated to blocking — upstream casehub-iot still uses Uni
 
 ## What's Next
 
