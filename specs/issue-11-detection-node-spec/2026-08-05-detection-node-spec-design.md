@@ -3,6 +3,7 @@
 **Issue:** casehubio/casehub-ops#11
 **Date:** 2026-08-05
 **Status:** Approved
+**Review:** Light post-spec (coherence + structure + robustness + cross-cutting) — 0 dimension issues, 5 cross-cutting verifications resolved
 
 ---
 
@@ -145,7 +146,19 @@ detections:
 | DeploymentActualStateAdapterTest | Detection nodes with stub drift checker |
 | SituationRegistrarTest (cross-repo) | Registry implements interface, exercises register/deregister/exists |
 
-## 11. Cross-Repo Sequencing
+## 11. Verified Integration Points
+
+Cross-cutting review flagged 5 areas for code-level verification. All resolved:
+
+| Concern | Verification | Status |
+|---|---|---|
+| `toRegistration()` passes `null` extractor to `SituationRegistration` | Existing `DesiredStateSituationDefinitionProvider` passes `null` on 2 of 3 registrations — valid and expected for default correlation key | Verified |
+| `"detection"` nodeType collision | No existing DeploymentNodeSpec returns `"detection"` — checked all 5 specs | Verified |
+| `SpecHashStore` coverage for DetectionNodeSpec | `SpecHashStore` is generic on `NodeId` + `NodeSpec` — works for any spec type automatically | Verified |
+| Cross-repo sequencing — API/runtime match | `SituationRegistrar` extracts methods already on `SituationDefinitionRegistry` — additive, non-breaking | Verified |
+| `DeploymentGoals` backward compat with missing `detections` | `@JsonIgnoreProperties(ignoreUnknown = true)` + compact constructor defaulting to `List.of()` — Jackson handles missing fields | Verified |
+
+## 12. Cross-Repo Sequencing
 
 1. `casehub-ras-api` — add `SituationRegistrar` interface
 2. `casehub-ras` — `SituationDefinitionRegistry implements SituationRegistrar`, add `exists()`
