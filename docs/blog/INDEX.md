@@ -16,3 +16,4 @@
 | [2026-07-01-mdp02-four-paths-same-boolean.md](2026-07-01-mdp02-four-paths-same-boolean.md) | 2026-07-01 | requiresHuman unification — four organic approaches traced to one NodeSpec default method, OR composition in DesiredNode, IoT deprovision bug fix |
 | [2026-07-07-mdp01-strategy-not-domain.md](2026-07-07-mdp01-strategy-not-domain.md) | 2026-07-07 | Strategy-based evidence routing — controlType/strategy separation, 4 real collectors replace 6 stubs, upstream API adaptation |
 | [2026-07-18-mdp01-handler-that-shouldnt-exist.md](2026-07-18-mdp01-handler-that-shouldnt-exist.md) | 2026-07-18 | Approval workflow — deleting the in-memory handler, K8s risk classification, REST API with tenancy isolation |
+| [2026-08-10-mdp01-when-eviction-is-wrong.md](2026-08-10-mdp01-when-eviction-is-wrong.md) | 2026-08-10 | Service lifecycle lazy reconstruction — why eviction was premature and DimensionSection as a live view collapsed the design |
