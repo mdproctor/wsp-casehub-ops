@@ -2,25 +2,25 @@
 
 ## Issue
 casehubio/casehub-ops#29
-Covers:
+Covers: 30,31,34
 Type: epic
 Safe exit: after any completed batch
 
 ## What to do
 Epic #29 — Service lifecycle management — long-lived case + RAS + child ganglion cases
-Current: Batch 2 — Efficiency design
+Current: Batch 3 — Child case implementations
 
 ## Batch Plan
 
 ### Batch 1 — Foundation design
 - [x] #30 — Service-as-Case domain modelling
 
-### Batch 2 — Efficiency design ← current
-- [ ] #31 — Operational efficiency — partial branch loading, eviction (depends on #30) ← active
+### Batch 2 — Efficiency design
+- [x] #31 — Operational efficiency — partial branch loading, eviction (depends on #30)
 
-### Batch 3 — Child case implementations
+### Batch 3 — Child case implementations ← current
 - [x] #34 — incident-response child case
-- [ ] #37 — compliance-remediation child case
+- [ ] #37 — compliance-remediation child case ← active
 
 ### Batch 4 — UI screens
 - [ ] #38 — stubbed UI screens — full implementation
@@ -29,6 +29,6 @@ Current: Batch 2 — Efficiency design
 - [ ] #47 — wire RAS health monitoring (blocked by casehub-ras#6)
 
 ## Session State
-Current batch: 2
-Current issue: #31 — Operational efficiency — partial branch loading, eviction
-Last wrap: advanced from #30 (batch 1 complete, #34 also landed)
+Current batch: 3
+Current issue: #37 — compliance-remediation child case
+Last wrap: advanced from #31 (batch 2 complete, #34 already landed)
