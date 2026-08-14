@@ -42,7 +42,7 @@ Cross-repo: blocks-ui added to slot 86 alongside ops.
 |----------|---------|--------|
 | `GET /` | Returns `List.of()` | Query `DeploymentRecordEntity.findByApplicationId(id)` |
 | `GET /current` | Returns empty 200 | Query latest `DeploymentRecordEntity` by applicationId + per-cluster reconciliation state from `ReconciliationLoop` |
-| `POST /rollback` | Returns 202 | Accept `RollbackRequest(deploymentId)`, load target `DeploymentRecordEntity`, restore the full topology snapshot (services JSON) from that record onto the `ApplicationEntity`, recompile desired state per cluster, record new `DeploymentRecordEntity` with trigger=ROLLBACK. Uses a new `rollbackToDeployment(UUID appId, UUID deploymentId, String tenancyId)` method on `ApplicationLifecycleService`. |
+| `POST /rollback` | Returns 202 | Accept `RollbackRequest(deploymentId)`, load target `DeploymentRecordEntity`, restore the full topology snapshot (services JSON) from that record onto the `ApplicationEntity`, recompile desired state per cluster, record new `DeploymentRecordEntity` with trigger=ROLLBACK. Uses a new `rollbackToDeployment(UUID appId, UUID deploymentId, String tenancyId)` method on `ApplicationLifecycleService`. **Interaction with per-service mutations:** rollback restores the full snapshot, silently undoing any post-deployment per-service changes (image updates, config changes, replica adjustments). This is intentional — rollback means "return to this known-good state." Active child cases (CVE remediation, upgrade) that are still modifying services will detect the spec change on their next convergence check and either re-apply their mutation or escalate. |
 
 #### CaseResource
 
@@ -73,7 +73,7 @@ Cross-repo: blocks-ui added to slot 86 alongside ops.
 | Endpoint | Current | Change |
 |----------|---------|--------|
 | `GET /status` | Returns empty 200 | Query `ServiceCaseRegistry.getByServiceId(serviceId)` for the service's `ServiceCaseContext`. Return per-dimension status, active child cases, service health. |
-| `POST /scale` | Returns 202 | Accept `ScaleServiceRequest`, delegate to existing `ScalingResource.scale()` logic (already real). ServiceOperationResource becomes a convenience wrapper. |
+| `POST /scale` | Returns 202 | Accept `ScaleServiceRequest`, delegate to `ScalingService` (new service bean extracted from `ScalingResource`'s scaling logic — cooldown checks, policy evaluation, CDI event emission). Both `ScalingResource` and `ServiceOperationResource` delegate to the same service bean. |
 | `POST /upgrade` | Returns 202 | Accept `UpgradeServiceRequest(newImage)`, signal application case via `CaseHubRuntime.signal(appCaseId, "upgradeRequested", upgradeSpec)`. The binding triggers `ops:service-upgrade` child case. |
 
 ### New ApplicationLifecycleService Method
@@ -123,8 +123,10 @@ The client uses the gap event to trigger a full state refresh via the REST API.
 **CloudEvents format:** All events use CloudEvents JSON envelope. SSE `event:` field
 carries the CloudEvent `type`. SSE `id:` field carries the CloudEvent `id` (UUID).
 
+**Filter enum:** `ALL`, `CASE`, `RECONCILIATION`
+
 **Filtered views:**
-- `CaseResource.streamEvents()` → `broadcaster.subscribe(appId, ALL)`
+- `CaseResource.streamEvents()` → `broadcaster.subscribe(appId, CASE)`
 - `ReconciliationResource.streamEvents()` → `broadcaster.subscribe(appId, RECONCILIATION)`
 
 ## CVE Registry
@@ -175,6 +177,9 @@ existing convention (`ApprovalPlanEntity` uses the same datasource).
 2. Case assess worker reads from signal payload (case context), NOT from CveStore
 3. When case completes → `CveStore.updateStatus(appId, cveId, RESOLVED/ESCALATED)` (via case completion observer)
 4. `SecurityResource.getCves()` → `CveStore.findByApplicationId(id)` for the list view
+5. `CveStatusObserver` (`@ObservesAsync CaseStateChangedEvent`) → when `ops:cve-response`
+   case reaches terminal state, extracts cveId from case context and calls
+   `CveStore.updateStatus(appId, cveId, RESOLVED/ESCALATED)`
 
 ## Case Descriptors
 
@@ -477,10 +482,11 @@ interface TopologyEdge {
 }
 ```
 
-**Rendering:** Uses `graph-renderer` (React Flow Lit-wrapped) + `computeElkLayout`.
-Adapts `TopologySnapshot` to `GraphModel` internally. Explore extending
-`blocks-dag-viewer`'s stencil pattern with custom node renderers for service
-status badges before creating a separate stencil package.
+**Rendering:** Extends `blocks-dag-viewer` with a pluggable node renderer for service
+status badges. The DAG viewer already uses `graph-renderer` (React Flow Lit-wrapped) +
+`computeElkLayout`. Topology-specific rendering (health colour coding, replica badges)
+is provided via custom React Flow node types registered through the existing stencil
+pattern — no separate `graph-stencil-topology` package needed.
 
 **Events:** `topology.node-selected` (carries serviceId)
 
@@ -529,6 +535,9 @@ CREATE INDEX idx_cve_record_tenancy ON cve_record(tenancy_id);
 | `app/.../case_/CveResponseCaseDescriptor.java` | **New** — full case descriptor |
 | `app/.../case_/ServiceUpgradeCaseDescriptor.java` | **New** — full case descriptor |
 | `app/.../case_/CaseDefinitionRegistrar.java` | Replace stubs with real descriptors |
+| `app/.../service/CveStatusObserver.java` | **New** — CDI observer updating CveStore on case completion |
+| `app/.../service/ScalingService.java` | **New** — extracted from ScalingResource, shared with ServiceOperationResource |
+| `app/.../rest/ScalingResource.java` | **Modified** — delegate to ScalingService |
 | `app/src/main/resources/db/app/migration/V6__cve_record.sql` | **New** — CVE table |
 
 ### casehub-ops (test files)
@@ -545,6 +554,8 @@ CREATE INDEX idx_cve_record_tenancy ON cve_record(tenancy_id);
 | `app/.../case_/ServiceUpgradeCaseDescriptorTest.java` | **New** — worker logic tests |
 | `app/.../service/ApplicationLifecycleServiceTest.java` | Add tests for `updateServiceImage()` |
 | `app/.../case_/CaseDefinitionRegistrarTest.java` | Verify real capabilities, not stubs |
+| `app/.../service/CveStatusObserverTest.java` | **New** — observer correctly updates CveStore |
+| `app/.../service/ScalingServiceTest.java` | **New** — extracted scaling logic tests |
 
 ### blocks-ui (new components)
 
