@@ -158,7 +158,7 @@ git commit -m "refactor(#19): extract shared test stubs to testing/ module"
 - Consumes: `StubAgentRegistry`, `StubChannelOperations`, `StubChannelStore`, `StubChannelBindingStore`, `StubEndpointRegistry` from `testing/`
 - Produces: Full reconciliation test class with `setUp()` wiring, reused by later scenarios in this task
 
-- [ ] **Step 1: Create test YAML with all 6 node types**
+- [x] **Step 1: Create test YAML (5 types from YAML + detection programmatic)**
 
 Create `deployment/src/test/resources/test-deployment/reconciliation-topology.yaml` with agent, channel, case type, trust policy, endpoint, and detection entries. Use the existing `topology.yaml` as base and add a detection entry:
 
@@ -206,7 +206,7 @@ detections:
     dependsOn: []
 ```
 
-- [ ] **Step 2: Write the green-field test with loop closure**
+- [x] **Step 2: Write the green-field test with loop closure**
 
 ```java
 @Test
@@ -248,17 +248,17 @@ void greenField_yamlLoad_provisionAll_loopClosure() {
 }
 ```
 
-- [ ] **Step 3: Write setUp() wiring**
+- [x] **Step 3: Write setUp() wiring**
 
 Wire `DeploymentGoalLoader`, `DeploymentGoalCompiler`, `DeploymentActualStateAdapter`, `DeploymentNodeProvisioner`, `TransitionPlanner` with shared stubs. Follow the pattern from `DeploymentLifecycleIntegrationTest.setUp()` but add `goalLoader` and `planner`.
 
-- [ ] **Step 4: Run test to verify it passes**
+- [x] **Step 4: Run test to verify it passes**
 
 Run: `/opt/homebrew/bin/mvn --batch-mode -o test -pl deployment -Dtest=DeploymentReconciliationIntegrationTest#greenField_yamlLoad_provisionAll_loopClosure -f /Users/mdproctor/claude/casehub/ops/pom.xml`
 
 Expected: PASS
 
-- [ ] **Step 5: Add drift remediation scenario**
+- [x] **Step 5: Add drift remediation scenario**
 
 ```java
 @Test
@@ -303,7 +303,7 @@ void driftRemediation_modifySpec_recompile_remediate() {
 }
 ```
 
-- [ ] **Step 6: Add node removal scenario with positive absence**
+- [x] **Step 6: Add node removal scenario (detection, not agent — AgentProvisionHandler has no deregister)**
 
 ```java
 @Test
@@ -344,17 +344,13 @@ void nodeRemoval_removeAgent_deprovision_positiveAbsence() {
 }
 ```
 
-- [ ] **Step 7: Run all deployment tests**
+- [x] **Step 7: Run all deployment tests (201 pass, FaultPolicy failures pre-existing)**
 
 Run: `/opt/homebrew/bin/mvn --batch-mode -o test -pl deployment -f /Users/mdproctor/claude/casehub/ops/pom.xml`
 
 Expected: All tests pass.
 
-- [ ] **Step 8: Commit**
-
-```bash
-git add deployment/
-git commit -m "test(#19): DeploymentReconciliationIntegrationTest — full planner-in-the-loop cycle"
+- [x] **Step 8: Commit** — `6f3aa73`
 ```
 
 ---
