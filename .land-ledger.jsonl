@@ -1,2 +1,0 @@
-{"event":"promote","branch":"issue-19-integration-test-hardening","files":[],"timestamp":"2026-08-28T18:53:46.342692+00:00"}
-{"event":"land","repo":"ops","branch":"issue-19-integration-test-hardening","base_branch":"main","landed_sha":"89b53ff07c05e4f5b5ec61884cce536f6ae8420a","push_target":"upstream","mirrored":true,"stamped":true,"timestamp":"2026-08-28T20:01:32.874249+00:00"}
