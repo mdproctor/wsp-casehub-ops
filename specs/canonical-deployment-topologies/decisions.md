@@ -74,15 +74,15 @@
 
 ## D7: YAML Format
 
-**Choice:** Topology-aware as a first-class construct
+**Choice:** Topology as a metadata field + YAML-native composition (revised per R1-02)
 **Alternatives:**
 - Flat service list per cluster — simpler but YAML doesn't communicate intent
-- Topology as metadata — topology is an annotation, not a structural concept
-**Rationale:** The topology type informs validation (invariants), auto-wiring (rules), and node generation (modules). Making it first-class means the YAML communicates what kind of system this is, not just what it contains.
-**Trade-offs:** More opinionated — users must pick a topology type
-**Sources:** casehub-desiredstate-yaml tutorials, InfraGoalCompiler patterns
-**Exploration:** quick
-**Status:** captured
+- New compiler with topology-specific schema — was the initial proposal, superseded by D8
+**Rationale:** The topology type is a **metadata field** (`topology: multi-tier/ha-multi-az`) that provides observability — dashboards, audit trails, GOAP migration triggers can query it. But the compilation uses existing YAML primitives (modules, invariants, rules, forEach). Topology identity is declared, not inferred. Implementation is generic.
+**Trade-offs:** Users must pick a topology type. The metadata field doesn't enforce — invariants and modules do the actual work.
+**Sources:** casehub-desiredstate-yaml tutorials, InfraGoalCompiler patterns, decision review R1-02
+**Exploration:** quick → revised after review
+**Status:** revised
 
 ## D8: Implementation Approach
 
@@ -97,25 +97,46 @@
 **Depends on:** D7 (topology as first-class concept)
 **Status:** captured
 
-## D9: Gap Analysis — Extend, Don't Reinvent
+## D9: Gap Analysis — Extend, Don't Reinvent (revised per R1-03)
 
-**Choice:** Only InfraNodeSpec extensions (Java) + topology modules (YAML) + GOAP actions (Java) are new. Everything else exists.
+**Choice:** InfraNodeSpec extensions (Java) + topology modules (YAML) + GOAP bridge code (Java) are new.
 **Alternatives:**
 - Build parallel infrastructure — new compiler, new planner, new test framework
 **Rationale:** CaseHub already has TransitionPlanner (steady-state), GoapPlanner (migration), Engine Cases (orchestration), Service Lifecycle (monitoring), and a rich YAML frontend. Building parallel machinery wastes effort and fragments the architecture.
-**Trade-offs:** Tighter coupling to existing components. If the desiredstate YAML frontend has limitations, they constrain topology support.
-**Sources:** TransitionPlanner.java, GoapPlanner.java, GoapPlanningStrategy.java, ServiceCaseContext, DimensionStatusService
-**Exploration:** deep-analysis
+**Trade-offs:** Tighter coupling to existing components. GOAP bridge code is larger than initially estimated — requires world state builder from ActualStateAdapter, action-to-provisioner bridge, and migration mode coordinator (see D10).
+**Sources:** TransitionPlanner.java, GoapPlanner.java, GoapPlanningStrategy.java, ServiceCaseContext, DimensionStatusService, decision review R1-03
+**Exploration:** deep-analysis → revised after review
 **Depends on:** D8 (YAML-native approach)
-**Status:** captured
+**Status:** revised
 
-## D10: CaseHub Full-Stack Integration
+## D10: CaseHub Full-Stack Integration (revised per R1-04, R1-05)
 
-**Choice:** Topology management uses the full CaseHub stack: TransitionPlanner + GOAP + Engine Cases + Service Lifecycle
+**Choice:** Full stack, phased. Single-cluster topologies (Phases 1–5) first. GOAP migration with coordination mechanism (Phase 6). Multi-cluster coordination for multi-region (Phase 7+).
 **Alternatives:**
 - Standalone topology management — simpler but misses the integration story
-**Rationale:** Each CaseHub component handles a different timescale: TransitionPlanner (seconds, steady-state), GOAP (minutes, migration), Engine (hours, orchestration with human gates), Service Lifecycle (days, ongoing monitoring). This is the architectural breakthrough — CaseHub's own stack IS the deployment management engine.
-**Trade-offs:** Later phases (GOAP, service lifecycle integration) depend on those components being ready
-**Sources:** TransitionPlanner.java analysis, GoapPlanner.java analysis, Chapter 5 service lifecycle
-**Exploration:** deep-analysis
+- Full multi-cluster from the start — too much new architecture before proving single-cluster
+**Rationale:** Each CaseHub component handles a different timescale. But GOAP migration requires a coordination mechanism — a migration mode flag that suspends TransitionPlanner's naive diff-and-converge while a migration case is active. Multi-region active-passive spans multiple reconciliation loops and requires cross-cluster coordination that doesn't exist yet — this is Phase 7+ work, not Phase 1–5.
+**Trade-offs:** Multi-region is aspirational until cross-cluster coordination is designed. Phase 1–5 prove the topology story on single-cluster topologies.
+**Sources:** TransitionPlanner.java, GoapPlanner.java, GoapPlanningStrategy.java, decision review R1-04, R1-05, R1-13
+**Exploration:** deep-analysis → revised after review
+**Status:** revised
+
+## D11: Matrix Purpose Split (new, per R1-06)
+
+**Choice:** Separate test intersections (~5) from tutorial exemplars (~9)
+**Alternatives:**
+- All 14 intersections get full 3-layer testing — diminishing returns past ~5
+- Only 5 intersections, no tutorials — misses the YAML-first engagement value
+**Rationale:** 5 intersections cover every YAML primitive at least once (forEach, modules, rules, invariants, lifecycle phases). The remaining 9 are tutorial exemplars with compilation tests only. This separates testing rigour from documentation value.
+**Trade-offs:** Tutorial exemplars get less verification. Test exemplars may be less readable than tutorial-optimised versions.
+**Sources:** Decision review R1-06
+**Exploration:** quick (surfaced by review)
 **Status:** captured
+
+### Core Test Intersections (5)
+
+1. **Multi-tier on single-node** — lifecycle phases, linear deps, baseline
+2. **Microservices on HA multi-AZ** — forEach across AZs, service discovery, modules
+3. **Event-driven on LB cluster** — broker-centric topology, invariants
+4. **Sidecar/mesh on LB cluster** — rules for sidecar injection, mesh module
+5. **Single service on single-node** — minimum viable, validation baseline

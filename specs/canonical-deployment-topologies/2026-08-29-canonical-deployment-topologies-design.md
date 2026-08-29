@@ -40,6 +40,7 @@ existing `casehub-desiredstate-yaml` primitives:
 | **Rules** | Auto-wiring | "Every deployment gets a ClusterIP service" |
 | **when:** | Optional features | "Include mesh only when mesh_enabled" |
 | **Variables** | Per-environment config | "replicas: 1 in dev, 3 in prod" |
+| **topology:** | Metadata for observability | `topology: multi-tier/ha-multi-az` — queryable by dashboards, GOAP, audit |
 
 ### 2.2 Generation Pipeline
 
@@ -103,8 +104,17 @@ Each intersection uses a recognisable real-world domain:
 | **A4: Event-Driven** | Local dev env | IoT telemetry pipeline | — | — |
 | **A5: Sidecar/Mesh** | — | Logistics fleet tracking | Insurance claims | — |
 
-**14 intersections.** Each gets a YAML exemplar, compilation test, and (for key
-intersections) reconciliation and live deployment tests.
+**14 intersections** split into two tiers (per D11):
+
+**Core test intersections (5)** — full 3-layer verification (compilation + reconciliation + live):
+1. Single service on single-node (baseline)
+2. Multi-tier on single-node (lifecycle phases, linear deps)
+3. Microservices on HA multi-AZ (forEach, modules, service discovery)
+4. Event-driven on LB cluster (broker-centric, invariants)
+5. Sidecar/mesh on LB cluster (rules, mesh module)
+
+**Tutorial exemplars (9)** — compilation tests + rich documentation. These prove YAML
+expressiveness across diverse domains and serve as the primary learning material.
 
 ---
 
@@ -524,10 +534,13 @@ prove the full CaseHub stack integration.
 ## 10. Out of Scope
 
 - **Multi-region active-active** — requires CRDT/consensus data architecture, not just infra
+- **Multi-cluster coordination** — multi-region active-passive requires cross-cluster reconciliation that doesn't exist yet. Multi-region YAML exemplars and compilation tests are in scope. Live multi-region deployment is Phase 7+ (per R1-05)
+- **TransitionPlanner/GOAP coordination mechanism** — migration mode flag suspending TransitionPlanner during GOAP migration. Designed in Phase 6, not Phase 1–5 (per R1-04)
 - **Deployment strategies** (blue-green, canary, rolling) — orthogonal to topology; future work
 - **Real cloud provider integrations** — live tests use minikube/kind, not AWS/GCP/Azure
 - **UI for topology management** — TS types are generated, but no UI screens in this phase
 - **Production-grade provisioner implementations** — handlers are functional but not hardened
+- **Batch/Job and Serverless architectures** — different deployment model (run-to-completion vs continuous). Future topology expansion (per R1-07)
 
 ---
 
