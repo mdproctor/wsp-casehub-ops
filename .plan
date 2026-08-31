@@ -15,4 +15,33 @@ evidence-era: true
 ## Queue
 - [x] casehubio/casehub-ops#19 — Issue #19
 - [ ] casehubio/casehub-ops#71 — fix DeploymentGoalLoader JavaTimeModule ← active
+  - [ ] Batch 1: B1 desiredstate SPI
+    - [ ] Task 1: NodeSpecFactory SPIs
+    - [ ] Task 2: NodeSpecRegistry generalisation
+    - [ ] Task 3: YamlNode backendId + scanNodeTypes + jar modules
+  - [ ] Batch 2: B2 ops-api types
+    - [ ] Task 4: 5 new InfraNodeSpec variants + enums
+    - [ ] Task 5: NodeTypeId on existing variants + null-coalescing
+  - [ ] Batch 3: B3 ops-infra wiring
+    - [ ] Task 6: InfraWrappingFactory + FactoryProvider
+    - [ ] Task 7: Dynamic handledTypes + parseSpec cases
+  - [ ] Batch 4: B4 modules
+    - [ ] Task 8: 4 topology YAML modules
+    - [ ] Task 9: Lifecycle + module interaction fix
+  - [ ] Batch 5: B5 exemplars
+    - [ ] Task 10: topology-tests module scaffold
+    - [ ] Task 11: Core exemplars T1-T5 + tests
+    - [ ] Task 12: Advanced exemplars T6-T14 + tests
+  - [ ] Batch 6: B6 verification
+    - [ ] Task 13: Reconciliation tests
+    - [ ] Task 14: Live K8s deployment tests
 - [ ] casehubio/casehub-ops#72 — design TransitionPlanner orphan UnknownSpec
+- [ ] casehubio/casehub-ops#74 — Epic canonical deployment topologies
+- [ ] casehubio/casehub-ops#75 — NodeSpecFactory SPI cross-repo
+- [ ] casehubio/casehub-ops#76 — InfraNodeSpec topology extensions
+- [ ] casehubio/casehub-ops#77 — NodeTypeId existing variants
+- [ ] casehubio/casehub-ops#78 — InfraWrappingFactory
+- [ ] casehubio/casehub-ops#79 — Topology YAML modules
+- [ ] casehubio/casehub-ops#80 — Lifecycle module interaction fix
+- [ ] casehubio/casehub-ops#81 — topology-tests 14 exemplars
+- [ ] casehubio/casehub-ops#82 — Reconciliation live tests
