@@ -1,10 +1,10 @@
 # Work Plan — issue-19-integration-test-hardening
 
 ## State
-branch: main
+branch: issue-71-fix-deployment-goal-loader-javatimemodule
 state: active
 project-sha: 2230701750993de86a4022bf399aeb691217dea4
-date: 2026-08-20
+date: 2026-09-01
 issue-repo: casehubio/casehub-ops
 covers: 19
 design-repo: project
