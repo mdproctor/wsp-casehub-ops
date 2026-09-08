@@ -171,6 +171,17 @@ For resources that push state changes (K8s watch API, CloudEvents). Falls back t
 
 **All proposed new work.** Composable YAML operations backed by Layer 1 Java SPIs.
 
+**Scope: HTTP API primitives.** Layer 2 primitives express CRUD operations against REST
+and GraphQL endpoints. This is the right abstraction for the long tail of cloud vendor APIs
+(Cloudflare, Supabase, Fly.io, OCI, ACME/Let's Encrypt) where writing a Java provisioner
+per vendor is disproportionate to the complexity. For resources managed via specialised
+client libraries or CLI tools (K8s fabric8 watch/informer, Terraform CLI, Ansible),
+production integrations may prefer Java SPI implementations that use those libraries
+directly. The K8s plugin examples in this spec use the K8s REST API — which is valid, as
+fabric8 is a convenience layer over the same HTTP API — but the existing
+`KubernetesNodeProvisioner` (EXISTS) with fabric8 Watch is more appropriate for
+production K8s management where watch streams and resource versioning matter.
+
 ### Interpolation Model
 
 Plugin YAML adopts the existing `${prefix.name}` interpolation convention from the YAML
@@ -186,6 +197,20 @@ surface (#116). Plugin-specific prefixes:
 Build-time validation: every template expression must have a recognised prefix. Unrecognised
 prefixes fail the build. `${spec.*}` field references are validated against the NodeSpec
 record's component names via Jandex (proposed — see §Build-Time Validation).
+
+**Runtime resolution errors:** Template expressions that pass build-time validation can still
+fail at runtime. The runtime error model:
+
+| Condition | Behaviour |
+|---|---|
+| `${spec.field}` resolves to `null` or `Optional.empty()` | Fail with `TemplateResolutionException` naming the expression, scope, and step |
+| JSONPath extraction (`$.path`) returns no matches | Variable set to `null`; if referenced in subsequent step, that step fails with source trace |
+| `${step.N.*}` references step that has not executed (out of range) | Fail with `TemplateResolutionException` — step index validated before execution |
+| Type mismatch (e.g., string value in numeric field) | Fail at deserialization with coercion error — existing `ObjectMapper.convertValue()` path |
+
+All runtime resolution errors produce structured `TemplateResolutionException` with: expression
+text, resolved scope, step index (if in provisioner sequence), and the original cause. These
+propagate as non-retryable `PROVISION_FAILED` faults to the graph-level fault policy.
 
 ### rest-call
 
@@ -264,6 +289,11 @@ paginate:
   max-pages: 500           # bound resource consumption; exceeding emits structured error
   on-cursor-invalid: fail  # 410 Gone → fail operation, retry on next reconciliation cycle
 ```
+
+**Consistency model:** Pagination produces an eventually-consistent snapshot — early pages
+reflect state at T₁, late pages at Tₙ. Drift detection via `compare-state` may produce
+false positives/negatives during large list operations. This is inherent to paginated APIs
+and acceptable — the reconciliation loop self-corrects on subsequent cycles.
 
 ### poll-until
 
@@ -346,7 +376,12 @@ provisioner:
 
 ## Layer 3: Plugin Schema
 
-Each plugin YAML has five required sections. Schema validation rejects plugins missing any section.
+Each plugin YAML has two required sections (`actual-state`, `provisioner`) and three
+optional sections (`fault-policy`, `cbr`, `ras`). Omitting optional sections emits a
+build-time warning — the plugin works but without self-healing capabilities. A plugin
+with only `actual-state` + `provisioner` contributes a functioning `ActualStateAdapter`
+and `NodeProvisioner` to the SPI Quad; fault-policy, CBR, and RAS add progressively
+richer self-healing behaviour.
 
 ### Complete Plugin Example — KubernetesDeploymentSpec
 
@@ -443,6 +478,8 @@ provisioner:
 
 fault-policy:
   faultTypes: [PROVISION_FAILED, NODE_DEGRADED]
+  counter-reset: on-outcome-signal    # reset when CBR outcome-signals are satisfied
+  counter-window: PT10M               # only count faults within this window
   tiers:
     - threshold: 3
       reviewNode:
@@ -460,6 +497,12 @@ fault-policy:
 # Declares what contextual features to extract when building RetrievalContext
 # for the existing CbrFaultPolicy (EXISTS: ConfigurationRetriever/Adapter).
 # Does NOT replace graph-level CBR — enriches it with per-node-type domain knowledge.
+#
+# Cold-start path: when CBR has no cases (new deployment), CbrFaultPolicy.onFault()
+# returns List.of() — no mutations. The fault-policy tiers (Section 3) provide the
+# baseline remediation path. As CBR accumulates cases from successful tier-driven
+# remediations (via outcome-signals), it begins proposing learned strategies that
+# may pre-empt or supplement tier escalation.
 
 cbr:
   context-features:
@@ -482,6 +525,10 @@ cbr:
 # ── Section 5: RAS — Detection Situations ────────────
 # Each situation compiles to a SituationDefinition (EXISTS: casehub-ras-api)
 # with full field support. Registered via SituationDefinitionProvider.
+# Ganglion IDs are auto-prefixed with plugin.name at build time to prevent
+# namespace collisions across plugins (e.g., restart-counter → k8s-deployment:restart-counter).
+# SituationDefinitionRegistry (EXISTS) throws on duplicate ganglionId — auto-prefixing
+# ensures plugins cannot collide.
 
 ras:
   situations:
@@ -549,6 +596,37 @@ ras:
 | 9 | OracleCloudVm | oci/vm-instance | REST (OCI API) | Pre-emptive: free-tier usage approaching limits |
 | 10 | LetsEncryptCert | letsencrypt/certificate | REST (ACME) | Ledger: certificate lifecycle audit trail |
 
+### InfraNodeSpec Sealed Hierarchy
+
+EXISTS: `InfraNodeSpec` is a `sealed interface` permitting 15 types. Of the 10 proposed
+plugins, 3 map to existing sealed variants (K8sDeploymentSpec, K8sServiceSpec,
+K8sIngressSpec). The remaining 7 require new sealed variants:
+
+| Plugin | New Sealed Variant | Notes |
+|---|---|---|
+| KubernetesSecret | `K8sSecretSpec` | Structurally similar to K8sConfigMapSpec but with base64 encoding and different RBAC |
+| CloudflareDns | `CloudflareDnsRecordSpec` | DNS record type, name, target, TTL, proxy status |
+| CloudflareWorker | `CloudflareWorkerSpec` | Script name, routes, environment variables, KV bindings |
+| SupabaseDatabase | `SupabaseDatabaseSpec` | Project ref, region, plan, connection pooling config |
+| FlyIoMachine | `FlyIoMachineSpec` | App name, region, image, size, services config |
+| OracleCloudVm | `OracleCloudVmSpec` | Shape, image, VNIC, availability domain |
+| LetsEncryptCert | `LetsEncryptCertSpec` | Domains, challenge type, key algorithm |
+
+Each variant is a Java record in `casehub-ops-api` with typed fields. The plugin YAML's
+`provisioner` section references these fields via `${spec.fieldName}` — build-time
+validation ensures the referenced fields exist on the record (see §Build-Time Validation).
+
+Adding sealed variants is mechanical: add the record, add it to the `permits` clause,
+add a `@NodeTypeId` annotation, register an `InfraNodeSpecFactoryProvider` (EXISTS pattern:
+`InfraWrappingFactory`). No architectural change — the pattern is established by C6
+Canonical Deployment Topologies.
+
+**Future: fully YAML-defined types.** For community plugins that should not require Java
+records, a future `YamlDynamicNodeSpec` implementing `NodeSpec` directly (bypassing the
+`InfraNodeSpec` sealed hierarchy) could carry `type + Map<String, Object>` properties.
+This is out of scope for the initial 10 first-party plugins but is a natural extension
+point. Tracked as a future enhancement, not a prerequisite.
+
 ## Type Safety and IDE Support
 
 ### Build-Time Validation Pipeline
@@ -579,6 +657,7 @@ Existing vs proposed validations:
 | `compare-state.fields` reference valid NodeSpec fields | **PROPOSED** | Same Jandex introspection as `${spec.*}` validation |
 | Fault policy `faultTypes` resolve to `FaultType` enum values | **PROPOSED** | Compile-time enum validation |
 | RAS situation `triggerAction.config` is non-null for `create-case` type | **PROPOSED** | Mirrors `TriggerAction.CreateCase` constructor validation |
+| Duplicate YAML filenames across JARs emit build-time WARNING | **PROPOSED** | `discoverYamlFiles()` uses `seen.add(fileName)` for dedup — currently silent. Warning alerts when a second JAR ships a file with the same name. |
 
 ### IDE Plugin Contract
 
@@ -682,25 +761,15 @@ in the interpolation model.
 
 ## Open Questions (from adversarial review)
 
-### OQ1: Plugin adoption barrier — five required sections
+### OQ1: Plugin adoption barrier — resolved
 
-Requiring CBR + RAS for every plugin means you can't write a "hello world" plugin without understanding case-based reasoning and situation detection. This could block community contributions.
+SETTLED: Sections 3-5 (`fault-policy`, `cbr`, `ras`) are now optional. Only `actual-state`
+and `provisioner` are required. Omitting optional sections emits a build-time warning
+("`Plugin 'cloudflare/dns-record' has no CBR learning surface — self-healing will be
+limited to threshold-based fault policy only`"). This removes the adoption barrier without
+sacrificing self-healing capabilities for plugins that choose to declare them.
 
-**Proposed mitigation:** Schema-valid defaults. A plugin can ship with stub sections that pass validation but emit a build-time warning:
-
-```yaml
-cbr:
-  context-features: []       # WARNING: no learning surface defined
-  resolution-strategies: []
-  outcome-signals: []
-
-ras:
-  situations: []          # WARNING: no detection situations defined
-```
-
-The five sections remain required structurally, but empty lists are valid. Warnings surface during build; errors only when deploying to production profiles.
-
-**Validation semantics for non-empty sections:**
+**Validation semantics for declared sections:**
 - `cbr.context-features`: string identifiers. Validated at runtime when `RetrievalContext` is built — the CBR adapter looks up named feature extractors. Unknown feature names log warnings but don't fail (extensibility).
 - `cbr.resolution-strategies`: string identifiers matching `TypedFaultPolicy` action types registered in the fault policy tier hierarchy. Validated at build time.
 - `ras.situations`: each situation is validated against `SituationDefinition` record constraints (non-null situationId, non-empty eventTypes, non-null chainMode, non-null triggerAction with config for create-case).
@@ -751,7 +820,7 @@ From [casehubio/casehub-ops#87](https://github.com/casehubio/casehub-ops/issues/
 | Java primitives (RestClient, GraphQlClient, AuthProvider, etc.) | §Layer 1 | Designed |
 | YAML primitives (rest-call, graphql-call, json-extract, etc.) | §Layer 2 | Designed |
 | 10 NodeSpec plugins (K8s, Cloudflare, Supabase, Fly.io, OCI, LE) | §Plugin Catalogue | Designed |
-| Plugin YAML schema with 5 required sections | §Layer 3 | Designed |
+| Plugin YAML schema (2 required + 3 optional sections) | §Layer 3 | Designed |
 | CBR integration per plugin | §Layer 3 CBR section | Designed |
 | RAS integration per plugin | §Layer 3 RAS section | Designed |
 | Testing (Kind-on-Podman, WireMock, real free-tier accounts) | §Testing Strategy | Designed |
