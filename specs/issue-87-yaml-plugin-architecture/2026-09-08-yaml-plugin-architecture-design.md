@@ -538,6 +538,74 @@ lifecycle:
 
 The reconciliation loop manages all five resources across three vendors continuously. CBR learns per-vendor reliability. RAS detects cross-vendor degradation. Faults in one vendor can trigger adaptation in others.
 
+## Open Questions (from adversarial review)
+
+### OQ1: Plugin adoption barrier — five required sections
+
+Requiring CBR + RAS for every plugin means you can't write a "hello world" plugin without understanding case-based reasoning and situation detection. This could block community contributions.
+
+**Proposed mitigation:** Schema-valid defaults. A plugin can ship with stub sections that pass validation but emit a build-time warning:
+
+```yaml
+cbr:
+  case-features: []       # WARNING: no learning surface defined
+  resolution-strategies: []
+  outcome-signals: []
+
+ras:
+  situations: []          # WARNING: no detection situations defined
+```
+
+The five sections remain required structurally, but empty lists are valid. Warnings surface during build; errors only when deploying to production profiles. This preserves the "think about self-healing" prompt without blocking experimentation.
+
+### OQ2: Plugin versioning and vendor API drift
+
+The spec doesn't address what happens when a vendor API changes. Plugin YAML references specific endpoints and response shapes — a Cloudflare API v4 → v5 migration would break plugins silently.
+
+**Needs:**
+- `plugin.version` field (semver) — already in the schema
+- `plugin.api-version` field — the vendor API version this plugin targets
+- Compatibility check at build time: warn if the deployed vendor API version doesn't match
+- Migration path: old and new plugin versions can coexist during rollout (multiple `NodeSpecFactory` registrations for the same `nodeType` with different api-versions)
+
+### OQ3: Template expression evaluation scoping
+
+`{spec.field}` template expressions appear in multiple contexts: `provisioner.create.body`, `actual-state.extract`, `ras.situations`. The evaluation context differs — `{spec.name}` in the provisioner refers to the NodeSpec being provisioned, but `{operationId}` in a `poll-until` refers to a value extracted from a previous step's response.
+
+**Needs explicit scoping rules:**
+- `{spec.*}` — always resolves from the NodeSpec record
+- `{response.*}` — resolves from the most recent rest-call/graphql-call response
+- `{step.N.*}` or `{previous.*}` — resolves from a named or previous step's extracted values
+- `{defaults.*}` — resolves from the plugin's `defaults:` block
+- `{node.*}` — resolves from the DesiredNode (nodeId, dependsOn targets)
+
+Build-time validation: every template expression must resolve to a known scope. Unresolved expressions fail the build.
+
+### OQ4: Vendor-specific error classification
+
+A Cloudflare 429 (rate limit) and a K8s 429 (admission webhook rejection) have different semantics. The `fault-policy.retryable` list uses HTTP status codes, which are ambiguous across vendors.
+
+**Needs:**
+- Optional `error-classifier` section per plugin that maps vendor-specific error responses to CaseHub fault categories:
+
+```yaml
+error-classifier:
+  rules:
+    - match:
+        status: 429
+        body-contains: "rate limit"
+      fault: rate-limited
+      retryable: true
+      backoff: exponential
+    - match:
+        status: 429
+        body-contains: "admission webhook"
+      fault: rejected
+      retryable: false
+```
+
+This replaces the flat `retryable: [429]` with semantic classification. The CBR learning surface can then distinguish between "rate-limited and retried successfully" vs "rejected and escalated."
+
 ## References
 
 - `casehub-desiredstate` — YamlDesiredStateProcessor, NodeSpecFactory, NodeSpecRegistry, CbrFaultPolicy, YamlFaultPolicy
