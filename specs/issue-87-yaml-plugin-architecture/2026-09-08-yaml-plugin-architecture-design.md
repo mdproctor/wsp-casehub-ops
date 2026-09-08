@@ -31,11 +31,12 @@ plugin YAML is the authoring format; the SPI Quad is the runtime contract.
 | Plugin YAML Section | Compiles To | How |
 |---|---|---|
 | `plugin.nodeType` + `actual-state` | `ActualStateAdapter` contribution | Generated adapter uses rest-call/graphql-call primitives to read actual state. Registered via `handledTypes()` for the declared `nodeType`. `compare-state` fields feed into drift detection by comparing desired `NodeSpec` fields against actual API responses. |
-| `plugin.nodeType` + `provisioner` | `NodeProvisioner` contribution | Generated provisioner uses rest-call/graphql-call primitives for create/update/delete. Registered via `handledTypes()` for the declared `nodeType`. Receives `ProvisionContext` with `tenancyId` and approval state. |
-| `fault-policy` | `ThresholdFaultPolicy` configuration | The plugin's fault tiers compile into `ThresholdFaultPolicy.Tier` entries with `TypedFaultPolicy` actions. Fault types use `FaultType` enums (PROVISION_FAILED, NODE_DEGRADED), not HTTP status codes. Transport-level errors (HTTP retries) are handled by Layer 2 `retry` primitive, not by the graph-level fault policy. |
+| `plugin.nodeType` + `provisioner` | `NodeProvisioner` contribution | Generated provisioner uses rest-call/graphql-call primitives for create/update/delete. Registered via `handledTypes()` for the declared `nodeType`. Receives `ProvisionContext` with `tenancyId` and approval state. `plugin.resyncInterval` passes through to `NodeProvisioner.resyncInterval()` (default PT5M, validated ≥ 1s by `DefaultNodeProvisionerRouter`). Runtime overrides via `PreferenceProvider` take precedence. |
+| `approval` | `ApprovalEvaluator` contribution | Generated evaluator classifies risk by action type (create/update/delete) with optional namespace-pattern overrides. Compiles to an `ApprovalEvaluator` (EXISTS: `casehub-ops-api`) that returns `ApprovalDecision.RequiresApproval` when risk ≥ configured threshold, `AutoApproved` otherwise. Without an `approval:` section, the plugin auto-approves all operations. |
+| `fault-policy` | `ThresholdFaultPolicy` configuration | The plugin's fault tiers compile into `ThresholdFaultPolicy.Tier` entries with `TypedFaultPolicy` actions. Fault types use `FaultType` enums (PROVISION_FAILED, NODE_DEGRADED), not HTTP status codes. Transport-level errors (HTTP retries) are handled by Layer 2 `retry` primitive, not by the graph-level fault policy. **Retry budget:** total HTTP requests before escalation is bounded by `retry.max-attempts × fault-policy highest-tier threshold`. Build-time validation warns when this product exceeds 50. |
 | `cbr` | `CbrFaultPolicy` learning surface metadata | Plugin CBR declarations define what contextual features to extract when building `RetrievalContext` for the `ConfigurationRetriever`. This enriches the existing graph-level CBR with per-node-type domain knowledge — it does not replace it. |
-| `ras.situations` | `SituationDefinition` registrations | Each situation compiles into a `SituationDefinition` record registered with the RAS `SituationDefinitionProvider`. Uses the full `SituationDefinition` field set. |
-| (implicit) | `EventSource` | YAML plugins do not declare an event-source section. Plugin-generated adapters and provisioners use periodic re-sync only (the reconciliation loop's default interval-grouped timers). For sub-second drift detection via external change feeds (K8s watch API, webhooks, SSE), a Java `EventSource` implementation is required — the Layer 1 `StreamingStateSource` SPI provides the contract. This is an intentional boundary: streaming protocols are transport-specific and vary too widely for a YAML-level abstraction. |
+| `ras.situations` | `SituationDefinition` registrations | Each situation compiles into a `SituationDefinition` record registered with the RAS `SituationDefinitionProvider`. Supports the full `SituationDefinition` field set — simple fields map directly; expression fields (`correlationKeyExpression`, `eventFilter`) use JQ expression syntax compiled to `JQExpressionEvaluator` (EXISTS: `casehub-platform-api`). See §RAS for field mapping. |
+| (implicit) | `EventSource` | YAML plugins do not declare an event-source section. Plugin-generated adapters and provisioners use periodic re-sync only (the reconciliation loop's default interval-grouped timers via `plugin.resyncInterval`). For sub-second drift detection via external change feeds (K8s watch API, webhooks, SSE), a Java `EventSource` implementation is required — the Layer 1 `StreamingStateSource` SPI provides the contract. This is an intentional boundary: streaming protocols are transport-specific and vary too widely for a YAML-level abstraction. |
 
 The existing `YamlGraph` format (EXISTS: `desiredState`, `variables`, `nodes`, `faultPolicy`,
 `invariants`, `rules`, `lifecycle`, `iterations`, `imports`) is **not changed**. Plugin YAML
@@ -185,15 +186,31 @@ production K8s management where watch streams and resource versioning matter.
 
 ### Interpolation Model
 
-Plugin YAML adopts the existing `${prefix.name}` interpolation convention from the YAML
-surface (#116). Plugin-specific prefixes:
+Plugin YAML extends the existing `VariableResolver` (EXISTS: `casehub-platform-yaml-core`)
+with plugin-specific `VariableSource` registrations. `VariableResolver` provides prefix-based
+dispatch via `${prefix.name}` pattern, deferred-prefix support for runtime-only values,
+error handling via `UnresolvedVariableException` with context, and `withScope()`/
+`withChainedScope()` for composable prefix registration. Plugin-specific prefixes:
 
-| Prefix | Scope | Examples |
-|--------|-------|---------|
-| `${plugin.name}` | Plugin `defaults:` block and `auth:` block | `${plugin.baseUrl}`, `${plugin.namespace}`, `${plugin.auth}` |
-| `${spec.name}` | NodeSpec record fields (resolved from the node being provisioned) | `${spec.name}`, `${spec.replicas}`, `${spec.image}` |
-| `${response.path}` | Most recent rest-call/graphql-call response (JSONPath) | `${response.$.id}`, `${response.$.status}` |
-| `${step.N.path}` | Named or indexed step result in a provisioner sequence | `${step.0.$.operation.id}` |
+| Prefix | Scope | Resolution Time | Examples |
+|--------|-------|----------------|---------|
+| `${plugin.name}` | Plugin `defaults:` block and `auth:` block | Build-time | `${plugin.baseUrl}`, `${plugin.namespace}`, `${plugin.auth}` |
+| `${spec.name}` | NodeSpec record fields (resolved from the node being provisioned) | Runtime | `${spec.name}`, `${spec.replicas}`, `${spec.image}` |
+| `${response.path}` | Most recent rest-call/graphql-call response (JSONPath) | Runtime | `${response.$.id}`, `${response.$.status}` |
+| `${step.N.path}` | Named or indexed step result in a provisioner sequence | Runtime | `${step.0.$.operation.id}` |
+| `${fault.name}` | FaultEvent fields (in fault-policy tier spec templates only) | Runtime (fault time) | `${fault.nodeId}`, `${fault.type}`, `${fault.detail}` |
+
+The `plugin` prefix resolves at build time from the plugin's `defaults:` block. The `spec`,
+`response`, `step`, and `fault` prefixes are registered as deferred prefixes during build-time
+validation (recognised but not resolved) and resolve at runtime via `VariableResolver.withScope()`
+with the appropriate `VariableSource`.
+
+**Migration note:** The existing `YamlFaultPolicyBuilder.resolveFaultString()` (EXISTS) uses
+hardcoded `String.replace()` for `${fault.*}` variables. The plugin compiler will use
+`VariableResolver` with a `fault` `VariableSource` backed by `FaultEvent` fields, giving
+uniform error handling across all plugin sections. Migration of `YamlFaultPolicyBuilder` to
+`VariableResolver` is tracked separately — the two approaches produce identical output for
+the three supported variables.
 
 Build-time validation: every template expression must have a recognised prefix. Unrecognised
 prefixes fail the build. `${spec.*}` field references are validated against the NodeSpec
@@ -377,12 +394,20 @@ provisioner:
 
 ## Layer 3: Plugin Schema
 
-Each plugin YAML has two required sections (`actual-state`, `provisioner`) and three
-optional sections (`fault-policy`, `cbr`, `ras`). Omitting optional sections emits a
+Each plugin YAML has two required sections (`actual-state`, `provisioner`) and four
+optional sections (`approval`, `fault-policy`, `cbr`, `ras`). Omitting optional sections emits a
 build-time warning — the plugin works but without self-healing capabilities. A plugin
 with only `actual-state` + `provisioner` contributes a functioning `ActualStateAdapter`
-and `NodeProvisioner` to the SPI Quad; fault-policy, CBR, and RAS add progressively
-richer self-healing behaviour.
+and `NodeProvisioner` to the SPI Quad; approval adds risk-gated provisioning, fault-policy,
+CBR, and RAS add progressively richer self-healing behaviour.
+
+**Approval model:** Without an `approval:` section, the generated provisioner always returns
+`ProvisionResult.Success` (auto-approved). With an `approval:` section, the generated
+provisioner calls `ApprovalEvaluator.evaluate()` (EXISTS: `casehub-ops-api`) before
+provisioning, returning `ProvisionResult.PendingApproval` when risk exceeds the threshold.
+`SimpleTransitionExecutor` (EXISTS) wraps every provisioner call with
+`PendingApprovalHandler` — the approval lifecycle (check → record → acknowledge) is
+handled by existing infrastructure.
 
 ### Complete Plugin Example — KubernetesDeploymentSpec
 
@@ -397,6 +422,7 @@ plugin:
   name: k8s-deployment
   version: 1.0
   nodeType: k8s_deployment
+  resyncInterval: PT5M              # ISO 8601 duration; default PT5M; validated >= 1s
   # EXISTS: nodeType must resolve to a registered @NodeTypeId
 
 auth:
@@ -501,7 +527,24 @@ provisioner:
       url: "${plugin.baseUrl}/apis/apps/v1/namespaces/${plugin.namespace}/deployments/${spec.nodeId}"
       auth: "${plugin.auth}"
 
-# ── Section 3: Fault Policy ──────────────────────────
+# ── Section 3: Approval ─────────────────────────────
+# Compiles to: ApprovalEvaluator contribution for nodeType k8s_deployment
+# Called by SimpleTransitionExecutor before provisioning — returns
+# PendingApproval when risk exceeds threshold, auto-approved otherwise.
+
+approval:
+  rules:
+    - action: create
+      risk: medium
+    - action: update
+      risk: low
+    - action: delete
+      risk: high
+  overrides:
+    - namespace-pattern: "prod-*"
+      risk: high                    # all operations in prod namespaces escalate to high
+
+# ── Section 4: Fault Policy ──────────────────────────
 # Compiles to: ThresholdFaultPolicy configuration
 # Transport-level errors (HTTP 429/500) handled by Layer 2 retry primitive
 # This section handles graph-level faults (PROVISION_FAILED, NODE_DEGRADED)
@@ -513,8 +556,12 @@ fault-policy:
   # signal-triggered reset today. FaultCountStore.reset() is explicit (caller decides);
   # ThresholdFaultPolicy counts indefinitely until reset. These are new capabilities.
   counter-reset: on-successful-provision   # PROPOSED: reset when faulting node provisions successfully
-  # Options: on-successful-provision (default, no CBR dependency),
-  #          on-outcome-signal (requires cbr.outcome-signals — build-time validated)
+  # on-successful-provision is the only counter-reset mode. The reconciliation loop calls
+  # FaultCountStore.reset() when a previously-faulting node provisions successfully.
+  # on-outcome-signal (CBR outcome triggers reset) was considered but requires cross-policy
+  # communication between CbrFaultPolicy and ThresholdFaultPolicy — the runtime explicitly
+  # forbids shared state between fault policies (FaultPolicyEngine composes independently).
+  # If cross-policy signalling is needed in future, it requires new runtime infrastructure.
   counter-window: PT10M               # PROPOSED: only count faults within this window
   # Review node types: Each tier's reviewNode.type must be a registered @NodeTypeId.
   # The existing YamlFaultPolicyBuilder (EXISTS) calls NodeSpecRegistry.resolve(type)
@@ -544,13 +591,13 @@ fault-policy:
           faultedNode: "${fault.nodeId}"
         humanGating: ALL
 
-# ── Section 4: CBR — Learning Surface ────────────────
+# ── Section 5: CBR — Learning Surface ────────────────
 # Declares what contextual features to extract when building RetrievalContext
 # for the existing CbrFaultPolicy (EXISTS: ConfigurationRetriever/Adapter).
 # Does NOT replace graph-level CBR — enriches it with per-node-type domain knowledge.
 #
 # Cold-start path: when CBR has no cases (new deployment), CbrFaultPolicy.onFault()
-# returns List.of() — no mutations. The fault-policy tiers (Section 3) provide the
+# returns List.of() — no mutations. The fault-policy tiers (Section 4) provide the
 # baseline remediation path. As CBR accumulates cases from successful tier-driven
 # remediations (via outcome-signals), it begins proposing learned strategies that
 # may pre-empt or supplement tier escalation.
@@ -573,13 +620,33 @@ cbr:
     - no-restart-within: 30m
     - ready-replicas-match: true
 
-# ── Section 5: RAS — Detection Situations ────────────
+# ── Section 6: RAS — Detection Situations ────────────
 # Each situation compiles to a SituationDefinition (EXISTS: casehub-ras-api)
 # with full field support. Registered via SituationDefinitionProvider.
 # Ganglion IDs are auto-prefixed with plugin.name at build time to prevent
 # namespace collisions across plugins (e.g., restart-counter → k8s-deployment:restart-counter).
 # SituationDefinitionRegistry (EXISTS) throws on duplicate ganglionId — auto-prefixing
 # ensures plugins cannot collide.
+#
+# SituationDefinition field mapping (12 fields):
+#   Required in YAML:  situationId, eventTypes, chainMode, triggerAction
+#   Optional in YAML:  correlationWindow, eventBufferDelay, triggerMode (default: fire-once),
+#                      correlationKeyExpression (JQ), eventFilter (JQ),
+#                      dynamicCaseData (map of JQ expressions), deadline
+#   Not in YAML:       feedbackConfig (requires Java — too many interdependent parameters
+#                      for declarative expression; plugins needing feedback tuning use a
+#                      Java SituationDefinitionProvider)
+#
+# Expression fields use JQ syntax compiled to JQExpressionEvaluator (EXISTS:
+# casehub-platform-api). JQ is the natural fit: events are JSON documents, JQ
+# operates on JSON, and the platform already has JQExpressionEvaluator.
+#
+# triggerAction build-time transformation: The YAML uses a flat format where
+# caseNamespace/caseName/caseVersion are siblings of type:. The build-time
+# compiler extracts these fields and creates:
+#   new TriggerAction.CreateCase(new CaseTriggerConfig(caseNamespace, caseName, caseVersion))
+# This is NOT Jackson deserialization — the compiler creates Java objects directly.
+# The flat YAML format is more ergonomic than the nested Java record structure.
 
 ras:
   situations:
@@ -590,6 +657,9 @@ ras:
         ganglionId: restart-counter
         requiredCount: 3
       correlationWindow: PT10M
+      eventBufferDelay: PT2S
+      correlationKeyExpression: ".data.podName"         # JQ: correlate by pod name
+      eventFilter: '.data.namespace == "default"'       # JQ: only default namespace
       triggerAction:
         type: create-case
         caseNamespace: k8s
@@ -597,6 +667,7 @@ ras:
         caseVersion: "1.0"
       triggerMode:
         type: fire-once
+      deadline: PT1H
 
     - situationId: memory-pressure
       eventTypes: [k8s.metrics.memory]
@@ -605,8 +676,12 @@ ras:
         ganglia: [mem-usage]
         minConfidence: 0.85
       correlationWindow: PT5M
+      correlationKeyExpression: ".data.deploymentName"  # JQ: correlate by deployment
       triggerAction:
         type: notify-only
+      dynamicCaseData:
+        memoryPct: ".data.utilizationPct"               # JQ: extract for case context
+        nodeName: ".data.nodeName"
 
     - situationId: image-pull-failure
       eventTypes: [k8s.pod.image-pull-failed]
@@ -715,7 +790,12 @@ Existing vs proposed validations:
 | `compare-state.fields` reference valid NodeSpec fields | **PROPOSED** | Same Jandex introspection as `${spec.*}` validation |
 | Fault policy `faultTypes` resolve to `FaultType` enum values | **PROPOSED** | Compile-time enum validation |
 | `counter-reset: on-outcome-signal` requires `cbr.outcome-signals` non-empty | **PROPOSED** | Build-time error if CBR section absent or outcome-signals empty |
-| RAS situation `triggerAction` has `caseNamespace`, `caseName`, `caseVersion` as direct fields for `create-case` | **PROPOSED** | Mirrors `CaseTriggerConfig` record: 3 non-null fields + optional `baseCaseData`. Fields are siblings of `type:`, not nested under `config:`. |
+| RAS situation `triggerAction` has `caseNamespace`, `caseName`, `caseVersion` as direct fields for `create-case` | **PROPOSED** | Mirrors `CaseTriggerConfig` record: 3 non-null fields + optional `baseCaseData`. Build-time compiler transforms flat YAML to nested `TriggerAction.CreateCase(new CaseTriggerConfig(...))` — NOT Jackson deserialization. |
+| RAS `correlationKeyExpression` and `eventFilter` are valid JQ expressions | **PROPOSED** | Compiled to `JQExpressionEvaluator` at build time. Syntax validation via JQ parser — invalid expressions fail the build. |
+| RAS `dynamicCaseData` values are valid JQ expressions | **PROPOSED** | Each map value compiled to `JQExpressionEvaluator`. Same JQ syntax validation. |
+| `plugin.resyncInterval` ≥ 1s (ISO 8601 duration) | **PROPOSED** | Matches `DefaultNodeProvisionerRouter.MIN_RESYNC`. Default PT5M if omitted. |
+| `approval.rules` action values are valid `StepAction` values | **PROPOSED** | Compile-time enum validation against `StepAction` (create → PROVISION, update → PROVISION, delete → DEPROVISION). |
+| `retry.max-attempts × fault-policy highest-tier threshold ≤ 50` | **PROPOSED** | Build-time WARNING (not error) when total retry budget exceeds 50. Alerts plugin authors to amplification risk. |
 | Plugin `nodeType` does not collide with existing `NodeProvisioner.handledTypes()` | **PROPOSED** | Build fails if a YAML plugin declares a nodeType already claimed by a Java `NodeProvisioner` bean. Prevents `DefaultNodeProvisionerRouter` `IllegalArgumentException` at startup. |
 | Duplicate YAML filenames across JARs emit build-time WARNING | **PROPOSED** | `discoverYamlFiles()` uses `seen.add(fileName)` for dedup — currently silent. Warning alerts when a second JAR ships a file with the same name. |
 
@@ -847,8 +927,8 @@ in the interpolation model.
 
 ### OQ1: Plugin adoption barrier — resolved
 
-SETTLED: Sections 3-5 (`fault-policy`, `cbr`, `ras`) are now optional. Only `actual-state`
-and `provisioner` are required. Omitting optional sections emits a build-time warning
+SETTLED: Sections 3-6 (`approval`, `fault-policy`, `cbr`, `ras`) are now optional. Only
+`actual-state` and `provisioner` are required. Omitting optional sections emits a build-time warning
 ("`Plugin 'cloudflare_dns_record' has no CBR learning surface — self-healing will be
 limited to threshold-based fault policy only`"). This removes the adoption barrier without
 sacrificing self-healing capabilities for plugins that choose to declare them.
