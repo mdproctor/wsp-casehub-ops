@@ -37,14 +37,25 @@
 - Work driven from fsitrading repo, not ops
 
 ### DevOps Challenge Scenarios (for demonstrating CaseHub vs Terraform/Ansible)
-- Goal: find a known challenge that exposes Terraform's declarative limits
-- Top 5 candidates researched:
-  1. Google Online Boutique multi-region — 11 microservices, lifecycle ordering, forEach per region (17k GitHub stars)
-  2. MLOps model pipeline — canary + human-gated promotion + metric-based rollback
-  3. Cloud Resume Challenge multi-cloud — most accessible, 12k+ Discord community
-  4. Multi-region CockroachDB — health-aware ordering, quorum reconciliation
-  5. K8s The Hard Way multi-cloud — 40k stars, cert rotation, human-gated upgrades
+- Goal: find a known challenge that exposes Terraform's declarative limits and demonstrate CaseHub's improved declarativeness
+- Could come from fsitrading naturally, or from a known internet challenge/competition
 - No selection made yet — pick one to implement as a reference demo
+- Top 5 candidates researched:
+
+**1. Google Online Boutique multi-region (best candidate)**
+11 polyglot microservices with inter-service gRPC dependencies, multi-region across 3 clusters. Terraform can provision it but can't express "deploy redis first, wait for health, then deploy cartservice" as lifecycle phases — only static `depends_on`. Can't adapt when a region degrades. CaseHub's lifecycle phases, forEach (stamp per region), invariants (every region must have redis), and continuous reconciliation handle this naturally. 17k+ GitHub stars — most recognisable.
+
+**2. MLOps model pipeline — canary + rollback**
+Deploy model → shadow-test on live traffic → canary 5% → monitor accuracy/drift (not just HTTP 200) → human approval gate before full promotion → automated rollback if metrics degrade. Terraform has zero concept of progressive rollout or quality-gated promotion. CaseHub's FaultPolicy handles metric-based rollback, HumanNodeHandler gates promotion. MLOps is $15B+ market.
+
+**3. Cloud Resume Challenge multi-cloud**
+Canonical entry-level DevOps challenge (12k+ Discord community). Simple but crosses CDN, DNS, serverless, database, CI/CD. Doing it across AWS + GCP + Cloudflare simultaneously — with reconciliation detecting when a free-tier resource disappears — is something no existing tool does declaratively. Most accessible demo for developers encountering CaseHub.
+
+**4. Multi-region CockroachDB + app stack**
+CockroachDB across 3 regions with automatic failover, app tier following database topology, DNS weighted routing shifting with health. Ordering is brutal: cluster bootstrap → node join → schema migration → app deploy → DNS cutover, each requiring the previous to be healthy, not just "created." Terraform's `depends_on` can't express "healthy." CaseHub's ActualStateAdapter verifies health, lifecycle phases enforce ordering.
+
+**5. K8s The Hard Way multi-cloud**
+Kelsey Hightower's manual K8s bootstrapping (40k+ GitHub stars). Extended to provision across AWS + GCP + bare metal — certificate rotation, etcd backup reconciliation, human approval for control plane upgrades. Hits every Terraform limitation: no continuous reconciliation, no approval gates, no cross-provider awareness, no adaptive response to node failure.
 
 ### Competitive Positioning
 - Crossplane solves multi-cloud provisioning (CNCF, production-grade)
