@@ -35,6 +35,7 @@ plugin YAML is the authoring format; the SPI Quad is the runtime contract.
 | `fault-policy` | `ThresholdFaultPolicy` configuration | The plugin's fault tiers compile into `ThresholdFaultPolicy.Tier` entries with `TypedFaultPolicy` actions. Fault types use `FaultType` enums (PROVISION_FAILED, NODE_DEGRADED), not HTTP status codes. Transport-level errors (HTTP retries) are handled by Layer 2 `retry` primitive, not by the graph-level fault policy. |
 | `cbr` | `CbrFaultPolicy` learning surface metadata | Plugin CBR declarations define what contextual features to extract when building `RetrievalContext` for the `ConfigurationRetriever`. This enriches the existing graph-level CBR with per-node-type domain knowledge — it does not replace it. |
 | `ras.situations` | `SituationDefinition` registrations | Each situation compiles into a `SituationDefinition` record registered with the RAS `SituationDefinitionProvider`. Uses the full `SituationDefinition` field set. |
+| (implicit) | `EventSource` | YAML plugins do not declare an event-source section. Plugin-generated adapters and provisioners use periodic re-sync only (the reconciliation loop's default interval-grouped timers). For sub-second drift detection via external change feeds (K8s watch API, webhooks, SSE), a Java `EventSource` implementation is required — the Layer 1 `StreamingStateSource` SPI provides the contract. This is an intentional boundary: streaming protocols are transport-specific and vary too widely for a YAML-level abstraction. |
 
 The existing `YamlGraph` format (EXISTS: `desiredState`, `variables`, `nodes`, `faultPolicy`,
 `invariants`, `rules`, `lifecycle`, `iterations`, `imports`) is **not changed**. Plugin YAML
@@ -463,7 +464,24 @@ provisioner:
       method: PUT
       url: "${plugin.baseUrl}/apis/apps/v1/namespaces/${plugin.namespace}/deployments/${spec.nodeId}"
       auth: "${plugin.auth}"
-      body: "${merge:create.body}"
+      body:
+        apiVersion: apps/v1
+        kind: Deployment
+        metadata:
+          name: "${spec.name}"
+          labels: "${spec.labels}"
+        spec:
+          replicas: "${spec.replicas}"
+          selector:
+            matchLabels: "${spec.labels}"
+          template:
+            metadata:
+              labels: "${spec.labels}"
+            spec:
+              containers:
+                - name: "${spec.name}"
+                  image: "${spec.image}"
+                  resources: "${spec.resources}"
 
   delete:
     rest-call:
@@ -478,19 +496,38 @@ provisioner:
 
 fault-policy:
   faultTypes: [PROVISION_FAILED, NODE_DEGRADED]
-  counter-reset: on-outcome-signal    # reset when CBR outcome-signals are satisfied
-  counter-window: PT10M               # only count faults within this window
+  # PROPOSED: counter-reset and counter-window require extending FaultCountStore (EXISTS)
+  # and ThresholdFaultPolicy (EXISTS) — neither supports time-windowed counting or
+  # signal-triggered reset today. FaultCountStore.reset() is explicit (caller decides);
+  # ThresholdFaultPolicy counts indefinitely until reset. These are new capabilities.
+  counter-reset: on-outcome-signal    # PROPOSED: reset when CBR outcome-signals are satisfied
+  counter-window: PT10M               # PROPOSED: only count faults within this window
+  # Review node types: Each tier's reviewNode.type must be a registered @NodeTypeId.
+  # The existing YamlFaultPolicyBuilder (EXISTS) calls NodeSpecRegistry.resolve(type)
+  # and deserialises spec template via Jackson convertValue into the resolved class.
+  #
+  # For YAML plugins, review specs are Java records in casehub-ops-api — same pattern
+  # as IoTReviewSpec (EXISTS: faultedNode + reason). Each plugin family needs a review
+  # spec record registered via @NodeTypeId:
+  #   @NodeTypeId("k8s/deployment-review")
+  #   public record K8sDeploymentReviewSpec(String action, NodeId faultedNode) implements NodeSpec {}
+  #
+  # The NodeProvisioner for the review type handles it as a no-op Success (review
+  # completes when the human approves the WorkItem) — same as IoTNodeProvisioner
+  # handling iot-review.
   tiers:
     - threshold: 3
       reviewNode:
         type: k8s/deployment-review
         spec:
           action: restart-pod
+          faultedNode: "${fault.nodeId}"
     - threshold: 5
       reviewNode:
         type: k8s/deployment-review
         spec:
           action: escalate-human
+          faultedNode: "${fault.nodeId}"
         humanGating: ALL
 
 # ── Section 4: CBR — Learning Surface ────────────────
@@ -542,7 +579,9 @@ ras:
       triggerAction:
         type: create-case
         config:
-          caseType: k8s-deployment-incident
+          caseNamespace: k8s
+          caseName: deployment-incident
+          caseVersion: "1.0"
       triggerMode:
         type: fire-once
 
@@ -566,7 +605,9 @@ ras:
       triggerAction:
         type: create-case
         config:
-          caseType: k8s-deployment-incident
+          caseNamespace: k8s
+          caseName: deployment-incident
+          caseVersion: "1.0"
 
     - situationId: replica-unavailable
       eventTypes: [k8s.deployment.replica-unavailable]
@@ -578,7 +619,9 @@ ras:
       triggerAction:
         type: create-case
         config:
-          caseType: k8s-deployment-incident
+          caseNamespace: k8s
+          caseName: deployment-incident
+          caseVersion: "1.0"
 ```
 
 ## Plugin Catalogue — 10 Plugins
@@ -656,7 +699,7 @@ Existing vs proposed validations:
 | `ras.situations` has at least one situation (or explicitly empty with warning) | **PROPOSED** | See §OQ1 |
 | `compare-state.fields` reference valid NodeSpec fields | **PROPOSED** | Same Jandex introspection as `${spec.*}` validation |
 | Fault policy `faultTypes` resolve to `FaultType` enum values | **PROPOSED** | Compile-time enum validation |
-| RAS situation `triggerAction.config` is non-null for `create-case` type | **PROPOSED** | Mirrors `TriggerAction.CreateCase` constructor validation |
+| RAS situation `triggerAction.config` has `caseNamespace`, `caseName`, `caseVersion` for `create-case` | **PROPOSED** | Mirrors `CaseTriggerConfig` record: 3 non-null fields + optional `baseCaseData` |
 | Duplicate YAML filenames across JARs emit build-time WARNING | **PROPOSED** | `discoverYamlFiles()` uses `seen.add(fileName)` for dedup — currently silent. Warning alerts when a second JAR ships a file with the same name. |
 
 ### IDE Plugin Contract
@@ -738,21 +781,44 @@ nodes:
       recordType: CNAME
       target: "${var.lb_hostname}"
     dependsOn: [api-ingress]
+```
+
+This is a single-phase graph — no `lifecycle:` section. The reconciliation loop manages
+all five resources across three vendors continuously, using the dependency edges for
+ordering (data-tier before compute-tier before edge-tier).
+
+For multi-phase topologies, nodes move inside `lifecycle.phases` — the existing
+`YamlDesiredStateProcessor.validateLifecycle()` rejects graphs with both top-level
+`nodes:` and `lifecycle:`. Each `YamlPhase` contains `Map<String, YamlNode> nodes`
+(full node definitions, not ID references). Example:
+
+```yaml
+desiredState:
+  namespace: myapp
+  name: phased-topology
 
 lifecycle:
   phases:
     - id: data-tier
-      nodes: [myapp-db]
+      completionCondition: allPresent
+      nodes:
+        myapp-db:
+          type: supabase/database
+          spec:
+            name: myapp-db
+            region: "${var.db_region}"
+            plan: free
     - id: compute-tier
-      nodes: [api-server, api-service]
-    - id: edge-tier
-      nodes: [api-ingress, api-dns]
+      completionCondition: allPresent
+      nodes:
+        api-server:
+          type: k8s/deployment
+          spec:
+            name: api-server
+            image: myapp/api:latest
+            replicas: 3
+          dependsOn: [myapp-db]
 ```
-
-The reconciliation loop manages all five resources across three vendors continuously.
-Each node type's plugin provides the SPI implementations. CBR learns per-vendor
-reliability. RAS detects cross-vendor degradation. Faults in one vendor can trigger
-adaptation in others.
 
 Note: cross-node field references (e.g., reading a connection string from one node's
 actual state to inject into another node's spec) require the `YamlGraph` `variables:`
@@ -771,8 +837,8 @@ sacrificing self-healing capabilities for plugins that choose to declare them.
 
 **Validation semantics for declared sections:**
 - `cbr.context-features`: string identifiers. Validated at runtime when `RetrievalContext` is built — the CBR adapter looks up named feature extractors. Unknown feature names log warnings but don't fail (extensibility).
-- `cbr.resolution-strategies`: string identifiers matching `TypedFaultPolicy` action types registered in the fault policy tier hierarchy. Validated at build time.
-- `ras.situations`: each situation is validated against `SituationDefinition` record constraints (non-null situationId, non-empty eventTypes, non-null chainMode, non-null triggerAction with config for create-case).
+- `cbr.resolution-strategies`: string identifiers. **Not validated at build time** — there is no named registry of `TypedFaultPolicy` implementations today (`TypedFaultPolicy` is an interface with anonymous implementations created by `YamlFaultPolicyBuilder.createTemplateTierAction()`). Validated at runtime when CBR proposes a strategy — unknown strategy names log a warning and fall through to tier-based escalation.
+- `ras.situations`: each situation is validated against `SituationDefinition` record constraints (non-null situationId, non-empty eventTypes, non-null chainMode, non-null triggerAction). For `create-case` trigger actions, `CaseTriggerConfig` requires three non-null fields: `caseNamespace`, `caseName`, `caseVersion`.
 
 ### OQ2: Plugin versioning and vendor API drift
 
