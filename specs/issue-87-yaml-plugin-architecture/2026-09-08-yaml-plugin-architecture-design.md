@@ -789,7 +789,7 @@ Existing vs proposed validations:
 | `ras.situations` has at least one situation (or explicitly empty with warning) | **PROPOSED** | See §OQ1 |
 | `compare-state.fields` reference valid NodeSpec fields | **PROPOSED** | Same Jandex introspection as `${spec.*}` validation |
 | Fault policy `faultTypes` resolve to `FaultType` enum values | **PROPOSED** | Compile-time enum validation |
-| `counter-reset: on-outcome-signal` requires `cbr.outcome-signals` non-empty | **PROPOSED** | Build-time error if CBR section absent or outcome-signals empty |
+| `counter-reset` value is `on-successful-provision` | **PROPOSED** | Build-time error if counter-reset has any value other than `on-successful-provision` (the only supported mode). |
 | RAS situation `triggerAction` has `caseNamespace`, `caseName`, `caseVersion` as direct fields for `create-case` | **PROPOSED** | Mirrors `CaseTriggerConfig` record: 3 non-null fields + optional `baseCaseData`. Build-time compiler transforms flat YAML to nested `TriggerAction.CreateCase(new CaseTriggerConfig(...))` — NOT Jackson deserialization. |
 | RAS `correlationKeyExpression` and `eventFilter` are valid JQ expressions | **PROPOSED** | Compiled to `JQExpressionEvaluator` at build time. Syntax validation via JQ parser — invalid expressions fail the build. |
 | RAS `dynamicCaseData` values are valid JQ expressions | **PROPOSED** | Each map value compiled to `JQExpressionEvaluator`. Same JQ syntax validation. |
@@ -984,7 +984,7 @@ From [casehubio/casehub-ops#87](https://github.com/casehubio/casehub-ops/issues/
 | Java primitives (RestClient, GraphQlClient, AuthProvider, etc.) | §Layer 1 | Designed |
 | YAML primitives (rest-call, graphql-call, json-extract, etc.) | §Layer 2 | Designed |
 | 7 production plugins + K8s syntax reference (Cloudflare, Supabase, Fly.io, OCI, LE, K8s Secret) | §Plugin Catalogue | Designed |
-| Plugin YAML schema (2 required + 3 optional sections) | §Layer 3 | Designed |
+| Plugin YAML schema (2 required + 4 optional sections) | §Layer 3 | Designed |
 | CBR integration per plugin | §Layer 3 CBR section | Designed |
 | RAS integration per plugin | §Layer 3 RAS section | Designed |
 | Testing (Kind-on-Podman, WireMock, real free-tier accounts) | §Testing Strategy | Designed |
