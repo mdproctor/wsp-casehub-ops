@@ -386,6 +386,12 @@ richer self-healing behaviour.
 
 ### Complete Plugin Example — KubernetesDeploymentSpec
 
+**Syntax reference only.** This example demonstrates the full YAML plugin format against
+the K8s REST API. In production, K8s deployments are provisioned by
+`KubernetesNodeProvisioner` (EXISTS) via fabric8 — deploying this plugin alongside the
+existing provisioner would cause a startup crash due to duplicate `NodeType` registration.
+See §Plugin Catalogue for production plugins.
+
 ```yaml
 plugin:
   name: k8s-deployment
@@ -629,26 +635,30 @@ ras:
         caseVersion: "1.0"
 ```
 
-## Plugin Catalogue — 10 Plugins
+## Plugin Catalogue — 7 Production Plugins
+
+K8s deployment, service, and ingress are managed in production by `KubernetesNodeProvisioner`
+(EXISTS) via fabric8 — these types already have registered `NodeProvisioner` and
+`ActualStateAdapter` beans. The §Complete Plugin Example uses `k8s_deployment` to
+demonstrate YAML syntax against a well-known API; it is a **syntax reference**, not a
+production plugin. Deploying a YAML plugin for a nodeType that already has a Java
+provisioner causes a startup crash (`DefaultNodeProvisionerRouter` throws
+`IllegalArgumentException` on duplicate `NodeType`).
 
 | # | Plugin | nodeType | API Protocol | CaseHub Integration |
 |---|--------|----------|-------------|---------------------|
-| 1 | KubernetesDeployment | k8s_deployment | REST (K8s API) | Trust on cluster health; Engine case for degradation |
-| 2 | KubernetesService | k8s_service | REST (K8s API) | Blocks summarisation: endpoint events → service health |
-| 3 | KubernetesIngress | k8s/ingress | REST (K8s API) | Pre-emptive: cert renewal 30 days before expiry |
-| 4 | KubernetesSecret | k8s/secret | REST (K8s API) | Ledger: tamper-evident rotation audit trail |
-| 5 | CloudflareDns | cloudflare/dns-record | REST (Cloudflare API) | Trust on propagation speed vs other DNS providers |
-| 6 | CloudflareWorker | cloudflare/worker | REST (Cloudflare API) | CBR: cold start avoidance strategies |
-| 7 | SupabaseDatabase | supabase/database | REST (Supabase API) | Pre-emptive: storage trending toward free-tier limit |
-| 8 | FlyIoMachine | flyio/machine | REST (Fly.io API) | Trust: region reliability scores from CBR history |
-| 9 | OracleCloudVm | oci/vm-instance | REST (OCI API) | Pre-emptive: free-tier usage approaching limits |
-| 10 | LetsEncryptCert | letsencrypt/certificate | REST (ACME) | Ledger: certificate lifecycle audit trail |
+| 1 | KubernetesSecret | k8s_secret | REST (K8s API) | Ledger: tamper-evident rotation audit trail |
+| 2 | CloudflareDns | cloudflare_dns_record | REST (Cloudflare API) | Trust on propagation speed vs other DNS providers |
+| 3 | CloudflareWorker | cloudflare_worker | REST (Cloudflare API) | CBR: cold start avoidance strategies |
+| 4 | SupabaseDatabase | supabase_database | REST (Supabase API) | Pre-emptive: storage trending toward free-tier limit |
+| 5 | FlyIoMachine | flyio_machine | REST (Fly.io API) | Trust: region reliability scores from CBR history |
+| 6 | OracleCloudVm | oci_vm_instance | REST (OCI API) | Pre-emptive: free-tier usage approaching limits |
+| 7 | LetsEncryptCert | letsencrypt_certificate | REST (ACME) | Ledger: certificate lifecycle audit trail |
 
 ### InfraNodeSpec Sealed Hierarchy
 
-EXISTS: `InfraNodeSpec` is a `sealed interface` permitting 15 types. Of the 10 proposed
-plugins, 3 map to existing sealed variants (K8sDeploymentSpec, K8sServiceSpec,
-K8sIngressSpec). The remaining 7 require new sealed variants:
+EXISTS: `InfraNodeSpec` is a `sealed interface` permitting 15 types. Each of the 7
+production plugins requires a new sealed variant:
 
 | Plugin | New Sealed Variant | Notes |
 |---|---|---|
@@ -672,7 +682,7 @@ Canonical Deployment Topologies.
 **Future: fully YAML-defined types.** For community plugins that should not require Java
 records, a future `YamlDynamicNodeSpec` implementing `NodeSpec` directly (bypassing the
 `InfraNodeSpec` sealed hierarchy) could carry `type + Map<String, Object>` properties.
-This is out of scope for the initial 10 first-party plugins but is a natural extension
+This is out of scope for the initial 7 production plugins but is a natural extension
 point. Tracked as a future enhancement, not a prerequisite.
 
 ## Type Safety and IDE Support
@@ -706,6 +716,7 @@ Existing vs proposed validations:
 | Fault policy `faultTypes` resolve to `FaultType` enum values | **PROPOSED** | Compile-time enum validation |
 | `counter-reset: on-outcome-signal` requires `cbr.outcome-signals` non-empty | **PROPOSED** | Build-time error if CBR section absent or outcome-signals empty |
 | RAS situation `triggerAction` has `caseNamespace`, `caseName`, `caseVersion` as direct fields for `create-case` | **PROPOSED** | Mirrors `CaseTriggerConfig` record: 3 non-null fields + optional `baseCaseData`. Fields are siblings of `type:`, not nested under `config:`. |
+| Plugin `nodeType` does not collide with existing `NodeProvisioner.handledTypes()` | **PROPOSED** | Build fails if a YAML plugin declares a nodeType already claimed by a Java `NodeProvisioner` bean. Prevents `DefaultNodeProvisionerRouter` `IllegalArgumentException` at startup. |
 | Duplicate YAML filenames across JARs emit build-time WARNING | **PROPOSED** | `discoverYamlFiles()` uses `seen.add(fileName)` for dedup — currently silent. Warning alerts when a second JAR ships a file with the same name. |
 
 ### IDE Plugin Contract
@@ -722,12 +733,13 @@ IntelliJ and VS Code plugins consume the generated JSON Schema. Plugin developme
 
 | Plugin type | Local test | Integration test |
 |-------------|-----------|-----------------|
-| K8s (1-4) | Kind on Podman | Real K8s cluster (CI) |
-| Cloudflare (5-6) | WireMock container | Real Cloudflare free account |
-| Supabase (7) | WireMock container | Real Supabase free project |
-| Fly.io (8) | WireMock container | Real Fly.io free account |
-| Oracle Cloud (9) | WireMock container | Real OCI always-free |
-| Let's Encrypt (10) | Pebble (ACME test server) | Let's Encrypt staging |
+| K8s Secret (1) | Kind on Podman | Real K8s cluster (CI) |
+| Cloudflare (2-3) | WireMock container | Real Cloudflare free account |
+| Supabase (4) | WireMock container | Real Supabase free project |
+| Fly.io (5) | WireMock container | Real Fly.io free account |
+| Oracle Cloud (6) | WireMock container | Real OCI always-free |
+| Let's Encrypt (7) | Pebble (ACME test server) | Let's Encrypt staging |
+| K8s syntax reference | Kind on Podman | Framework validation only — not deployed alongside existing provisioner |
 
 All local tests run on Podman. No Docker dependency.
 
@@ -746,7 +758,7 @@ variables:
 
 nodes:
   myapp-db:
-    type: supabase/database
+    type: supabase_database
     spec:
       name: myapp-db
       region: "${var.db_region}"
@@ -772,7 +784,7 @@ nodes:
     dependsOn: [api-server]
 
   api-ingress:
-    type: k8s/ingress
+    type: k8s_ingress
     spec:
       name: api-ingress
       host: api.myapp.com
@@ -781,7 +793,7 @@ nodes:
     dependsOn: [api-service]
 
   api-dns:
-    type: cloudflare/dns-record
+    type: cloudflare_dns_record
     spec:
       name: api.myapp.com
       recordType: CNAME
@@ -809,7 +821,7 @@ lifecycle:
       completionCondition: allPresent
       nodes:
         myapp-db:
-          type: supabase/database
+          type: supabase_database
           spec:
             name: myapp-db
             region: "${var.db_region}"
@@ -837,7 +849,7 @@ in the interpolation model.
 
 SETTLED: Sections 3-5 (`fault-policy`, `cbr`, `ras`) are now optional. Only `actual-state`
 and `provisioner` are required. Omitting optional sections emits a build-time warning
-("`Plugin 'cloudflare/dns-record' has no CBR learning surface — self-healing will be
+("`Plugin 'cloudflare_dns_record' has no CBR learning surface — self-healing will be
 limited to threshold-based fault policy only`"). This removes the adoption barrier without
 sacrificing self-healing capabilities for plugins that choose to declare them.
 
@@ -891,7 +903,7 @@ From [casehubio/casehub-ops#87](https://github.com/casehubio/casehub-ops/issues/
 |---|---|---|
 | Java primitives (RestClient, GraphQlClient, AuthProvider, etc.) | §Layer 1 | Designed |
 | YAML primitives (rest-call, graphql-call, json-extract, etc.) | §Layer 2 | Designed |
-| 10 NodeSpec plugins (K8s, Cloudflare, Supabase, Fly.io, OCI, LE) | §Plugin Catalogue | Designed |
+| 7 production plugins + K8s syntax reference (Cloudflare, Supabase, Fly.io, OCI, LE, K8s Secret) | §Plugin Catalogue | Designed |
 | Plugin YAML schema (2 required + 3 optional sections) | §Layer 3 | Designed |
 | CBR integration per plugin | §Layer 3 CBR section | Designed |
 | RAS integration per plugin | §Layer 3 RAS section | Designed |
