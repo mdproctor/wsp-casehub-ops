@@ -431,6 +431,12 @@ actual-state:
 # ── Section 2: Provisioner ───────────────────────────
 # Compiles to: NodeProvisioner contribution for nodeType k8s/deployment
 # Receives ProvisionContext with tenancyId and approval state at runtime
+#
+# Idempotency: The reconciliation loop provides create-idempotency through
+# actual-state reconciliation. If a create POST succeeds but the response is
+# lost, the next cycle's actual-state.list discovers the resource and skips
+# re-creation. Plugins for vendors whose list API has eventual consistency
+# should guard creates by checking actual-state before POST.
 
 provisioner:
   create:
@@ -500,7 +506,9 @@ fault-policy:
   # and ThresholdFaultPolicy (EXISTS) — neither supports time-windowed counting or
   # signal-triggered reset today. FaultCountStore.reset() is explicit (caller decides);
   # ThresholdFaultPolicy counts indefinitely until reset. These are new capabilities.
-  counter-reset: on-outcome-signal    # PROPOSED: reset when CBR outcome-signals are satisfied
+  counter-reset: on-successful-provision   # PROPOSED: reset when faulting node provisions successfully
+  # Options: on-successful-provision (default, no CBR dependency),
+  #          on-outcome-signal (requires cbr.outcome-signals — build-time validated)
   counter-window: PT10M               # PROPOSED: only count faults within this window
   # Review node types: Each tier's reviewNode.type must be a registered @NodeTypeId.
   # The existing YamlFaultPolicyBuilder (EXISTS) calls NodeSpecRegistry.resolve(type)
@@ -578,10 +586,9 @@ ras:
       correlationWindow: PT10M
       triggerAction:
         type: create-case
-        config:
-          caseNamespace: k8s
-          caseName: deployment-incident
-          caseVersion: "1.0"
+        caseNamespace: k8s
+        caseName: deployment-incident
+        caseVersion: "1.0"
       triggerMode:
         type: fire-once
 
@@ -604,10 +611,9 @@ ras:
       correlationWindow: PT2M
       triggerAction:
         type: create-case
-        config:
-          caseNamespace: k8s
-          caseName: deployment-incident
-          caseVersion: "1.0"
+        caseNamespace: k8s
+        caseName: deployment-incident
+        caseVersion: "1.0"
 
     - situationId: replica-unavailable
       eventTypes: [k8s.deployment.replica-unavailable]
@@ -618,10 +624,9 @@ ras:
       correlationWindow: PT15M
       triggerAction:
         type: create-case
-        config:
-          caseNamespace: k8s
-          caseName: deployment-incident
-          caseVersion: "1.0"
+        caseNamespace: k8s
+        caseName: deployment-incident
+        caseVersion: "1.0"
 ```
 
 ## Plugin Catalogue — 10 Plugins
@@ -699,7 +704,8 @@ Existing vs proposed validations:
 | `ras.situations` has at least one situation (or explicitly empty with warning) | **PROPOSED** | See §OQ1 |
 | `compare-state.fields` reference valid NodeSpec fields | **PROPOSED** | Same Jandex introspection as `${spec.*}` validation |
 | Fault policy `faultTypes` resolve to `FaultType` enum values | **PROPOSED** | Compile-time enum validation |
-| RAS situation `triggerAction.config` has `caseNamespace`, `caseName`, `caseVersion` for `create-case` | **PROPOSED** | Mirrors `CaseTriggerConfig` record: 3 non-null fields + optional `baseCaseData` |
+| `counter-reset: on-outcome-signal` requires `cbr.outcome-signals` non-empty | **PROPOSED** | Build-time error if CBR section absent or outcome-signals empty |
+| RAS situation `triggerAction` has `caseNamespace`, `caseName`, `caseVersion` as direct fields for `create-case` | **PROPOSED** | Mirrors `CaseTriggerConfig` record: 3 non-null fields + optional `baseCaseData`. Fields are siblings of `type:`, not nested under `config:`. |
 | Duplicate YAML filenames across JARs emit build-time WARNING | **PROPOSED** | `discoverYamlFiles()` uses `seen.add(fileName)` for dedup — currently silent. Warning alerts when a second JAR ships a file with the same name. |
 
 ### IDE Plugin Contract
