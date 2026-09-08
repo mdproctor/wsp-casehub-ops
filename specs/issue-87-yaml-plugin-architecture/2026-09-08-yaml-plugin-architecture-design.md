@@ -1,8 +1,18 @@
 # YAML-First Plugin Architecture — Design Spec
 
+## Status
+
+**All infrastructure described in this spec is proposed new work** unless explicitly
+marked as "EXISTS". The three-layer architecture, all Layer 1 Java SPIs, all Layer 2
+YAML primitives, and the Layer 3 plugin schema are new proposals. The spec builds on
+top of existing infrastructure in `casehub-desiredstate` and `casehub-ops` — see §SPI
+Quad Integration for the mapping.
+
 ## Overview
 
 A three-layer architecture enabling infrastructure plugins to be authored primarily in YAML, with Java as the escape hatch for transport and protocol concerns. Each plugin is a complete self-healing unit: it provisions a resource, detects its own problems, resolves them using CBR-guided strategies, and learns from outcomes.
+
+A **plugin YAML file** defines a new node type's SPI implementations — how to provision it, how to read its actual state, what faults look like, what CBR features are relevant, and what RAS situations to detect. Plugin YAML files extend the node type ecosystem; **they do not replace `YamlGraph` topology declarations**. Users compose plugins into topologies using the existing `YamlGraph` format.
 
 **Repos:** casehub-desiredstate (domain-agnostic primitives), casehub-ops (domain-specific plugins)
 
@@ -10,28 +20,76 @@ A three-layer architecture enabling infrastructure plugins to be authored primar
 
 ## Architecture
 
-### Three Layers
+### SPI Quad Integration
+
+EXISTS: Every domain module in casehub-ops implements five SPIs from `casehub-desiredstate-api`:
+`GoalCompiler`, `ActualStateAdapter`, `NodeProvisioner`, `FaultPolicy`, and `EventSource`.
+
+A YAML plugin compiles into implementations of these SPIs at Quarkus build time. The
+plugin YAML is the authoring format; the SPI Quad is the runtime contract.
+
+| Plugin YAML Section | Compiles To | How |
+|---|---|---|
+| `plugin.nodeType` + `actual-state` | `ActualStateAdapter` contribution | Generated adapter uses rest-call/graphql-call primitives to read actual state. Registered via `handledTypes()` for the declared `nodeType`. `compare-state` fields feed into drift detection by comparing desired `NodeSpec` fields against actual API responses. |
+| `plugin.nodeType` + `provisioner` | `NodeProvisioner` contribution | Generated provisioner uses rest-call/graphql-call primitives for create/update/delete. Registered via `handledTypes()` for the declared `nodeType`. Receives `ProvisionContext` with `tenancyId` and approval state. |
+| `fault-policy` | `ThresholdFaultPolicy` configuration | The plugin's fault tiers compile into `ThresholdFaultPolicy.Tier` entries with `TypedFaultPolicy` actions. Fault types use `FaultType` enums (PROVISION_FAILED, NODE_DEGRADED), not HTTP status codes. Transport-level errors (HTTP retries) are handled by Layer 2 `retry` primitive, not by the graph-level fault policy. |
+| `cbr` | `CbrFaultPolicy` learning surface metadata | Plugin CBR declarations define what contextual features to extract when building `RetrievalContext` for the `ConfigurationRetriever`. This enriches the existing graph-level CBR with per-node-type domain knowledge — it does not replace it. |
+| `ras.situations` | `SituationDefinition` registrations | Each situation compiles into a `SituationDefinition` record registered with the RAS `SituationDefinitionProvider`. Uses the full `SituationDefinition` field set. |
+
+The existing `YamlGraph` format (EXISTS: `desiredState`, `variables`, `nodes`, `faultPolicy`,
+`invariants`, `rules`, `lifecycle`, `iterations`, `imports`) is **not changed**. Plugin YAML
+files register new node types; `YamlGraph` topology files reference those node types via
+`type:` fields in their `nodes:` block.
+
+**Topology authoring flow:**
 
 ```
-┌─────────────────────────────────────────────────────┐
-│  Layer 3: YAML Plugins (casehub-ops/extensions/)    │
-│  k8s-deployment.yaml, cloudflare-dns.yaml, ...      │
-│  Each: actual-state + provisioner + fault-policy     │
-│        + cbr + ras                                   │
-├─────────────────────────────────────────────────────┤
-│  Layer 2: YAML Primitives (casehub-desiredstate/    │
-│           extensions/yaml-primitives/)               │
-│  rest-call, graphql-call, json-extract,              │
-│  compare-state, paginate, poll-until, auth-ref,      │
-│  retry                                               │
-│  Compose over each other AND over Layer 1            │
-├─────────────────────────────────────────────────────┤
-│  Layer 1: Java SPIs (casehub-desiredstate/           │
-│           extensions/)                               │
-│  RestClient, GraphQlClient, AuthProvider,            │
-│  JsonPathExtractor, StreamingStateSource,            │
-│  RateLimiter, NodeSpecSchemaGenerator                │
-└─────────────────────────────────────────────────────┘
+1. Plugin YAML (this spec)     → registers nodeType + SPI implementations
+2. YamlGraph topology (EXISTS) → declares nodes using registered nodeTypes
+3. YamlGraphRecorder (EXISTS)  → compiles topology into DesiredStateGraph
+4. Reconciliation loop (EXISTS)→ drives the SPI Quad implementations
+```
+
+### Relationship to YamlGraph
+
+The existing `YamlGraph` format (delivered by #116, #117) declares WHAT should exist — a
+graph of nodes with types, specs, and dependencies. The YAML plugin architecture defines
+HOW each node type is implemented — how to provision it, how to read its state, how to
+handle faults.
+
+| Concern | Where | Format |
+|---|---|---|
+| "I want 3 K8s deployments behind a load balancer" | `YamlGraph` topology file | `nodes:`, `dependsOn:`, `variables:`, `lifecycle:` |
+| "A K8s deployment is provisioned via REST API to /apis/apps/v1/..." | Plugin YAML file | `actual-state:`, `provisioner:`, `fault-policy:`, `cbr:`, `ras:` |
+
+A `NodeSpecFactory` (EXISTS: `NodeSpecFactory.create(Map<String, Object>)`) bridges the
+two: the topology file's `spec:` block is parsed by the plugin's factory into a typed
+`NodeSpec` record.
+
+### Three Layers
+
+All three layers below are **proposed new work**.
+
+```
+┌─────────────────────────────────────────────────────────┐
+│  Layer 3: YAML Plugins (casehub-ops/plugins/)           │
+│  k8s-deployment.yaml, cloudflare-dns.yaml, ...          │
+│  Each: actual-state + provisioner + fault-policy         │
+│        + cbr + ras                                       │
+├─────────────────────────────────────────────────────────┤
+│  Layer 2: YAML Primitives (casehub-desiredstate/        │
+│           yaml/primitives/)                              │
+│  rest-call, graphql-call, json-extract,                  │
+│  compare-state, paginate, poll-until, auth-ref,          │
+│  retry                                                   │
+│  Compose over each other AND over Layer 1                │
+├─────────────────────────────────────────────────────────┤
+│  Layer 1: Java SPIs (casehub-desiredstate/               │
+│           yaml/spi/)                                     │
+│  RestClient, GraphQlClient, AuthProvider,                │
+│  JsonPathExtractor, StreamingStateSource,                │
+│  RateLimiter, NodeSpecSchemaGenerator                    │
+└─────────────────────────────────────────────────────────┘
 ```
 
 ### Composability Proof
@@ -47,8 +105,8 @@ actual-state:
       strategy: link-header
       rest-call:
         method: GET
-        url: "{baseUrl}/apis/apps/v1/namespaces/{namespace}/deployments"
-        auth: "{auth-ref}"
+        url: "${plugin.baseUrl}/apis/apps/v1/namespaces/${plugin.namespace}/deployments"
+        auth: "${plugin.auth}"
       extract:
         forEach: "$.items[*]"
         mappings:
@@ -62,13 +120,13 @@ No Java. Three YAML layers (plugin → paginate → rest-call), one Java layer u
 
 ## Layer 1: Java SPIs
 
-These are transport and computation primitives that YAML cannot express.
+**All proposed new work.** These are transport and computation primitives that YAML cannot express.
 
 ### api-client (shared)
 
 | SPI | Purpose | Key Methods |
 |-----|---------|------------|
-| `AuthProvider` | Authentication for any API | `authenticate(SecretRef) → HttpHeaders` |
+| `AuthProvider` | Authentication with token lifecycle | `authenticate(SecretRef) → AuthSession` (headers + TTL + refresh) |
 | `RetryPolicy` | Backoff and retry logic | `shouldRetry(int statusCode, int attempt) → RetryDecision` |
 | `RateLimiter` | Cross-request throttling | `acquire(String endpoint) → Permit` |
 
@@ -99,7 +157,7 @@ Response extraction is native to GraphQL — the query itself selects fields. No
 |-----|---------|------------|
 | `NodeSpecSchemaGenerator` | Java record → JSON Schema | `generate(Class<? extends NodeSpec>) → JsonSchema` |
 
-Runs at Quarkus build time via `YamlDesiredStateProcessor`. Feeds IDE plugins for validation and autocomplete.
+**Proposed new capability.** Would run at Quarkus build time via `YamlDesiredStateProcessor` (EXISTS). Implementation requires Jandex reflective access to record component names — feasible but non-trivial. Feeds IDE plugins for validation and autocomplete.
 
 ### streaming
 
@@ -111,20 +169,36 @@ For resources that push state changes (K8s watch API, CloudEvents). Falls back t
 
 ## Layer 2: YAML Primitives
 
-Composable YAML operations backed by Layer 1 Java SPIs.
+**All proposed new work.** Composable YAML operations backed by Layer 1 Java SPIs.
+
+### Interpolation Model
+
+Plugin YAML adopts the existing `${prefix.name}` interpolation convention from the YAML
+surface (#116). Plugin-specific prefixes:
+
+| Prefix | Scope | Examples |
+|--------|-------|---------|
+| `${plugin.name}` | Plugin `defaults:` block and `auth:` block | `${plugin.baseUrl}`, `${plugin.namespace}`, `${plugin.auth}` |
+| `${spec.name}` | NodeSpec record fields (resolved from the node being provisioned) | `${spec.name}`, `${spec.replicas}`, `${spec.image}` |
+| `${response.path}` | Most recent rest-call/graphql-call response (JSONPath) | `${response.$.id}`, `${response.$.status}` |
+| `${step.N.path}` | Named or indexed step result in a provisioner sequence | `${step.0.$.operation.id}` |
+
+Build-time validation: every template expression must have a recognised prefix. Unrecognised
+prefixes fail the build. `${spec.*}` field references are validated against the NodeSpec
+record's component names via Jandex (proposed — see §Build-Time Validation).
 
 ### rest-call
 
 ```yaml
 rest-call:
   method: POST | GET | PUT | DELETE | PATCH
-  url: "{baseUrl}/path/{variable}"
-  auth: "{auth-ref}"
+  url: "${plugin.baseUrl}/path/${spec.field}"
+  auth: "${plugin.auth}"
   headers:
     Content-Type: application/json
   body:
-    field: "{spec.field}"
-  expect: 200          # expected status code
+    field: "${spec.field}"
+  expect: 200
   extract:
     nodeId: "$.result.id"
 ```
@@ -133,16 +207,16 @@ rest-call:
 
 ```yaml
 graphql-call:
-  endpoint: "{baseUrl}/graphql"
-  auth: "{auth-ref}"
+  endpoint: "${plugin.baseUrl}/graphql"
+  auth: "${plugin.auth}"
   query: |
     mutation CreateRecord($input: RecordInput!) {
       createRecord(input: $input) { id status }
     }
   variables:
     input:
-      name: "{spec.name}"
-      type: "{spec.recordType}"
+      name: "${spec.name}"
+      type: "${spec.recordType}"
   extract:
     nodeId: "$.data.createRecord.id"
 ```
@@ -151,7 +225,7 @@ graphql-call:
 
 ```yaml
 json-extract:
-  source: "{response}"
+  source: "${response}"
   mappings:
     nodeId: "$.id"
     status: "$.status"
@@ -160,12 +234,20 @@ json-extract:
 
 ### compare-state
 
+Defines per-plugin field-level drift comparison. At runtime, the generated
+`ActualStateAdapter` reads actual state via the plugin's `actual-state` section,
+then uses `compare-state` to determine which fields have drifted. This feeds into
+the existing `NodeStatus.DRIFTED` mechanism — the adapter returns DRIFTED when any
+compared field differs, triggering re-provisioning through the normal reconciliation
+loop.
+
 ```yaml
 compare-state:
   fields: [name, replicas, image, resources]
   ignore: [metadata.resourceVersion, status.observedGeneration]
   tolerance:
-    cpu: 10%      # allow 10% drift before flagging
+    cpu: 10%                  # percentage only: zero baseline → always drift
+    memory: { percent: 10%, absolute: 50Mi }  # composite: absolute fallback when baseline is zero
 ```
 
 ### paginate
@@ -175,10 +257,12 @@ Composes over `rest-call`:
 ```yaml
 paginate:
   strategy: cursor | offset | link-header | relay
-  rest-call: { ... }    # the call to repeat
-  cursor-path: "$.metadata.continue"   # for cursor strategy
+  rest-call: { ... }
+  cursor-path: "$.metadata.continue"
   results-path: "$.items"
   page-size: 100
+  max-pages: 500           # bound resource consumption; exceeding emits structured error
+  on-cursor-invalid: fail  # 410 Gone → fail operation, retry on next reconciliation cycle
 ```
 
 ### poll-until
@@ -189,8 +273,9 @@ Composes over `rest-call`:
 poll-until:
   rest-call:
     method: GET
-    url: "{baseUrl}/operations/{operationId}"
+    url: "${plugin.baseUrl}/operations/${step.0.$.operation.id}"
   condition: "$.status == 'READY'"
+  failure-condition: "$.status in ['FAILED', 'ERROR', 'CANCELLED']"
   interval: 5s
   timeout: 5m
   backoff: linear | exponential
@@ -198,17 +283,30 @@ poll-until:
 
 ### auth-ref
 
+Defines authentication configuration for the plugin. The plugin's top-level `auth:`
+block IS the auth-ref — there is one auth configuration per plugin, referenced via
+`${plugin.auth}` in rest-call/graphql-call bodies. Multi-auth plugins (e.g., different
+auth for control plane vs data plane) declare named auth blocks:
+
 ```yaml
-auth-ref:
-  type: bearer-token | oauth2 | api-key | basic
-  secret-ref: my-secret-name     # K8s secret or Vault path
-  # oauth2-specific
-  token-url: "https://auth.example.com/oauth/token"
-  client-id-ref: oauth-client-id
-  scopes: [read, write]
+auth:
+  default:
+    type: bearer-token | oauth2 | api-key | basic
+    secret-ref: my-secret-name
+  data-plane:
+    type: oauth2
+    token-url: "https://auth.example.com/oauth/token"
+    client-id-ref: oauth-client-id
+    scopes: [read, write]
 ```
 
+Referenced as `${plugin.auth}` (resolves to `default`) or `${plugin.auth.data-plane}`.
+
 ### retry
+
+Transport-level retry logic. This handles HTTP-level errors (429, 500, 502, 503) —
+it is distinct from graph-level fault policy which handles `FaultType` enums after
+provisioning fails.
 
 ```yaml
 retry:
@@ -218,6 +316,8 @@ retry:
   max-delay: 30s
   retryable: [429, 500, 502, 503]
   fatal: [401, 403, 404]
+  transport-errors: retryable    # DNS, TCP, TLS failures — retryable | fatal
+  on-401: refresh-and-retry      # single token refresh before classifying as fatal
 ```
 
 ### Composability: YAML over YAML
@@ -229,16 +329,17 @@ A plugin can also compose primitives in sequence:
 ```yaml
 provisioner:
   create:
-    - rest-call:         # step 1: create the resource
+    - rest-call:
         method: POST
-        url: "{baseUrl}/resources"
-        body: { name: "{spec.name}" }
+        url: "${plugin.baseUrl}/resources"
+        body: { name: "${spec.name}" }
         extract: { operationId: "$.operation.id" }
-    - poll-until:        # step 2: wait for it to be ready
+    - poll-until:
         rest-call:
           method: GET
-          url: "{baseUrl}/operations/{operationId}"
+          url: "${plugin.baseUrl}/operations/${step.0.$.operation.id}"
         condition: "$.status == 'READY'"
+        failure-condition: "$.status in ['FAILED', 'ERROR']"
         interval: 5s
         timeout: 5m
 ```
@@ -254,16 +355,19 @@ plugin:
   name: k8s-deployment
   version: 1.0
   nodeType: k8s/deployment
+  # EXISTS: nodeType must resolve to a registered @NodeTypeId
 
 auth:
-  type: bearer-token
-  secret-ref: k8s-service-account-token
+  default:
+    type: bearer-token
+    secret-ref: k8s-service-account-token
 
 defaults:
   baseUrl: "https://kubernetes.default.svc"
   namespace: default
 
 # ── Section 1: Actual State ──────────────────────────
+# Compiles to: ActualStateAdapter contribution for nodeType k8s/deployment
 
 actual-state:
   list:
@@ -271,8 +375,8 @@ actual-state:
       strategy: link-header
       rest-call:
         method: GET
-        url: "{baseUrl}/apis/apps/v1/namespaces/{namespace}/deployments"
-        auth: "{auth-ref}"
+        url: "${plugin.baseUrl}/apis/apps/v1/namespaces/${plugin.namespace}/deployments"
+        auth: "${plugin.auth}"
       results-path: "$.items"
       extract:
         forEach: "$.items[*]"
@@ -289,89 +393,99 @@ actual-state:
       ignore: [metadata.resourceVersion, status.observedGeneration]
 
 # ── Section 2: Provisioner ───────────────────────────
+# Compiles to: NodeProvisioner contribution for nodeType k8s/deployment
+# Receives ProvisionContext with tenancyId and approval state at runtime
 
 provisioner:
   create:
     rest-call:
       method: POST
-      url: "{baseUrl}/apis/apps/v1/namespaces/{namespace}/deployments"
-      auth: "{auth-ref}"
+      url: "${plugin.baseUrl}/apis/apps/v1/namespaces/${plugin.namespace}/deployments"
+      auth: "${plugin.auth}"
       body:
         apiVersion: apps/v1
         kind: Deployment
         metadata:
-          name: "{spec.name}"
-          labels: "{spec.labels}"
+          name: "${spec.name}"
+          labels: "${spec.labels}"
         spec:
-          replicas: "{spec.replicas}"
+          replicas: "${spec.replicas}"
           selector:
-            matchLabels: "{spec.labels}"
+            matchLabels: "${spec.labels}"
           template:
             metadata:
-              labels: "{spec.labels}"
+              labels: "${spec.labels}"
             spec:
               containers:
-                - name: "{spec.name}"
-                  image: "{spec.image}"
-                  resources: "{spec.resources}"
+                - name: "${spec.name}"
+                  image: "${spec.image}"
+                  resources: "${spec.resources}"
       extract:
         nodeId: "$.metadata.name"
 
   update:
     rest-call:
       method: PUT
-      url: "{baseUrl}/apis/apps/v1/namespaces/{namespace}/deployments/{nodeId}"
-      auth: "{auth-ref}"
-      body: "{merge:create.body}"
+      url: "${plugin.baseUrl}/apis/apps/v1/namespaces/${plugin.namespace}/deployments/${spec.nodeId}"
+      auth: "${plugin.auth}"
+      body: "${merge:create.body}"
 
   delete:
     rest-call:
       method: DELETE
-      url: "{baseUrl}/apis/apps/v1/namespaces/{namespace}/deployments/{nodeId}"
-      auth: "{auth-ref}"
+      url: "${plugin.baseUrl}/apis/apps/v1/namespaces/${plugin.namespace}/deployments/${spec.nodeId}"
+      auth: "${plugin.auth}"
 
 # ── Section 3: Fault Policy ──────────────────────────
+# Compiles to: ThresholdFaultPolicy configuration
+# Transport-level errors (HTTP 429/500) handled by Layer 2 retry primitive
+# This section handles graph-level faults (PROVISION_FAILED, NODE_DEGRADED)
 
 fault-policy:
-  retryable: [429, 500, 502, 503, 504]
-  retry:
-    max-attempts: 3
-    backoff: exponential
-    initial-delay: 2s
-  fatal: [401, 403, 409]
+  faultTypes: [PROVISION_FAILED, NODE_DEGRADED]
   tiers:
     - threshold: 3
-      action: restart-pod
+      reviewNode:
+        type: k8s/deployment-review
+        spec:
+          action: restart-pod
     - threshold: 5
-      action: escalate-human
-      human-gating: required
+      reviewNode:
+        type: k8s/deployment-review
+        spec:
+          action: escalate-human
+        humanGating: ALL
 
 # ── Section 4: CBR — Learning Surface ────────────────
+# Declares what contextual features to extract when building RetrievalContext
+# for the existing CbrFaultPolicy (EXISTS: ConfigurationRetriever/Adapter).
+# Does NOT replace graph-level CBR — enriches it with per-node-type domain knowledge.
 
 cbr:
-  case-features:
+  context-features:
     - error-type          # OOMKilled, CrashLoopBackOff, ImagePullBackOff
     - resource-utilisation # CPU/memory percentage at failure time
     - time-of-day         # peak vs off-peak
     - replica-count       # how many replicas were running
     - previous-image      # the image before the failing one
   resolution-strategies:
-    - restart-pod         # delete pod, let deployment recreate
-    - rollback-image      # revert to previous known-good image
-    - scale-horizontal    # increase replica count
-    - scale-vertical      # increase resource limits
-    - cordon-node         # mark K8s node unschedulable
+    - restart-pod
+    - rollback-image
+    - scale-horizontal
+    - scale-vertical
+    - cordon-node
   outcome-signals:
-    - pod-healthy-after: 5m       # pod stays healthy for 5 minutes
-    - no-restart-within: 30m      # no restarts in 30 minutes
-    - ready-replicas-match: true  # readyReplicas == desiredReplicas
+    - pod-healthy-after: 5m
+    - no-restart-within: 30m
+    - ready-replicas-match: true
 
 # ── Section 5: RAS — Detection Situations ────────────
+# Each situation compiles to a SituationDefinition (EXISTS: casehub-ras-api)
+# with full field support. Registered via SituationDefinitionProvider.
 
 ras:
   situations:
-    - id: pod-crash-loop
-      description: "Pod restarting repeatedly"
+    - situationId: pod-crash-loop
       eventTypes: [k8s.pod.restart]
       chainMode:
         type: count
@@ -380,20 +494,22 @@ ras:
       correlationWindow: PT10M
       triggerAction:
         type: create-case
+        config:
+          caseType: k8s-deployment-incident
+      triggerMode:
+        type: fire-once
 
-    - id: memory-pressure
-      description: "Memory usage trending toward OOM"
+    - situationId: memory-pressure
       eventTypes: [k8s.metrics.memory]
       chainMode:
         type: threshold
-        ganglionId: mem-usage
+        ganglia: [mem-usage]
         minConfidence: 0.85
       correlationWindow: PT5M
       triggerAction:
         type: notify-only
 
-    - id: image-pull-failure
-      description: "Container image cannot be pulled"
+    - situationId: image-pull-failure
       eventTypes: [k8s.pod.image-pull-failed]
       chainMode:
         type: count
@@ -402,9 +518,10 @@ ras:
       correlationWindow: PT2M
       triggerAction:
         type: create-case
+        config:
+          caseType: k8s-deployment-incident
 
-    - id: replica-unavailable
-      description: "Ready replicas below desired for sustained period"
+    - situationId: replica-unavailable
       eventTypes: [k8s.deployment.replica-unavailable]
       chainMode:
         type: streak
@@ -413,6 +530,8 @@ ras:
       correlationWindow: PT15M
       triggerAction:
         type: create-case
+        config:
+          caseType: k8s-deployment-incident
 ```
 
 ## Plugin Catalogue — 10 Plugins
@@ -434,29 +553,38 @@ ras:
 
 ### Build-Time Validation Pipeline
 
+EXISTS: `@NodeTypeId` annotation scan → `NodeSpecRegistry` (type string → class) → `NodeSpecFactory.create(Map<String, Object>)` at runtime.
+
+**Proposed additions** to `YamlDesiredStateProcessor` (EXISTS):
+
 ```
-Java records (@NodeTypeId) → Jandex scan at build time
-    → NodeSpecRegistry (type string → class)
-    → NodeSpecSchemaGenerator (class → JSON Schema)
-    → YAML validation against schema
-    → Build fails on type mismatch
+EXISTS: @NodeTypeId Jandex scan → NodeSpecRegistry (type → class)
+NEW:    NodeSpecSchemaGenerator (class → JSON Schema via Jandex record component introspection)
+NEW:    Plugin YAML validation against schema
+NEW:    Build fails on type mismatch
 ```
 
 ### Plugin YAML Validation
 
-The Quarkus build-time extension (`YamlDesiredStateProcessor`) validates plugins:
-- `nodeType` resolves to a registered `@NodeTypeId`
-- `spec.field` references in templates resolve to fields on the NodeSpec record
-- `auth-ref` resolves to a declared auth block
-- `cbr.case-features` and `cbr.resolution-strategies` are non-empty
-- `ras.situations` has at least one situation defined
-- `compare-state.fields` reference valid NodeSpec fields
+The Quarkus build-time extension (`YamlDesiredStateProcessor`, EXISTS) validates plugins.
+Existing vs proposed validations:
+
+| Validation | Status | Notes |
+|---|---|---|
+| `nodeType` resolves to a registered `@NodeTypeId` | **EXISTS** | `YamlDesiredStateProcessor.scanNodeTypes()` does this today |
+| `${spec.field}` references resolve to NodeSpec record fields | **PROPOSED** | Requires Jandex introspection of record component names — feasible but non-trivial |
+| `${plugin.auth}` resolves to a declared auth block | **PROPOSED** | New plugin-level validation |
+| `cbr.context-features` and `cbr.resolution-strategies` are non-empty (or explicitly empty with warning) | **PROPOSED** | See §OQ1 |
+| `ras.situations` has at least one situation (or explicitly empty with warning) | **PROPOSED** | See §OQ1 |
+| `compare-state.fields` reference valid NodeSpec fields | **PROPOSED** | Same Jandex introspection as `${spec.*}` validation |
+| Fault policy `faultTypes` resolve to `FaultType` enum values | **PROPOSED** | Compile-time enum validation |
+| RAS situation `triggerAction.config` is non-null for `create-case` type | **PROPOSED** | Mirrors `TriggerAction.CreateCase` constructor validation |
 
 ### IDE Plugin Contract
 
-JSON Schema per plugin enables:
-- **Autocomplete:** `spec.` triggers field list for the declared nodeType
-- **Validation:** red squiggle on `spec.nonexistent`
+**Proposed.** JSON Schema per plugin enables:
+- **Autocomplete:** `${spec.}` triggers field list for the declared nodeType
+- **Validation:** red squiggle on `${spec.nonexistent}`
 - **Rename:** rename a NodeSpec field in Java → schema regenerates → IDE flags all YAML files using the old name
 - **Navigate to definition:** `nodeType: k8s/deployment` → jump to `KubernetesDeploymentSpec.java`
 
@@ -477,66 +605,80 @@ All local tests run on Podman. No Docker dependency.
 
 ## Cross-Vendor Topology Example
 
-A topology YAML composing plugins from multiple vendors:
+A `YamlGraph` topology (EXISTS: format from #116/#117) composing nodes from
+multiple YAML plugins:
 
 ```yaml
-modules:
-  - k8s-deployment-plugin
-  - k8s-service-plugin
-  - k8s-ingress-plugin
-  - cloudflare-dns-plugin
-  - supabase-database-plugin
+desiredState:
+  namespace: myapp
+  name: cross-vendor-topology
+
+variables:
+  db_region: eu-west-1
 
 nodes:
-  - spec:
-      nodeType: supabase/database
+  myapp-db:
+    type: supabase/database
+    spec:
       name: myapp-db
-      region: eu-west-1
+      region: "${var.db_region}"
       plan: free
     dependsOn: []
 
-  - spec:
-      nodeType: k8s/deployment
+  api-server:
+    type: k8s/deployment
+    spec:
       name: api-server
       image: myapp/api:latest
       replicas: 3
       env:
-        DATABASE_URL: "{supabase-db.connectionString}"
+        DATABASE_URL: "${var.supabase_connection_string}"
     dependsOn: [myapp-db]
 
-  - spec:
-      nodeType: k8s/service
+  api-service:
+    type: k8s/service
+    spec:
       name: api-service
       port: 8080
       targetPort: 8080
     dependsOn: [api-server]
 
-  - spec:
-      nodeType: k8s/ingress
+  api-ingress:
+    type: k8s/ingress
+    spec:
       name: api-ingress
       host: api.myapp.com
       service: api-service
       tls: true
     dependsOn: [api-service]
 
-  - spec:
-      nodeType: cloudflare/dns-record
+  api-dns:
+    type: cloudflare/dns-record
+    spec:
       name: api.myapp.com
       recordType: CNAME
-      target: "{api-ingress.loadBalancerHostname}"
+      target: "${var.lb_hostname}"
     dependsOn: [api-ingress]
 
 lifecycle:
   phases:
-    - name: data-tier
+    - id: data-tier
       nodes: [myapp-db]
-    - name: compute-tier
+    - id: compute-tier
       nodes: [api-server, api-service]
-    - name: edge-tier
-      nodes: [api-ingress, api.myapp.com]
+    - id: edge-tier
+      nodes: [api-ingress, api-dns]
 ```
 
-The reconciliation loop manages all five resources across three vendors continuously. CBR learns per-vendor reliability. RAS detects cross-vendor degradation. Faults in one vendor can trigger adaptation in others.
+The reconciliation loop manages all five resources across three vendors continuously.
+Each node type's plugin provides the SPI implementations. CBR learns per-vendor
+reliability. RAS detects cross-vendor degradation. Faults in one vendor can trigger
+adaptation in others.
+
+Note: cross-node field references (e.g., reading a connection string from one node's
+actual state to inject into another node's spec) require the `YamlGraph` `variables:`
+block and external variable injection. Direct inter-node field access is not supported
+in the interpolation model.
 
 ## Open Questions (from adversarial review)
 
@@ -548,7 +690,7 @@ Requiring CBR + RAS for every plugin means you can't write a "hello world" plugi
 
 ```yaml
 cbr:
-  case-features: []       # WARNING: no learning surface defined
+  context-features: []       # WARNING: no learning surface defined
   resolution-strategies: []
   outcome-signals: []
 
@@ -556,7 +698,12 @@ ras:
   situations: []          # WARNING: no detection situations defined
 ```
 
-The five sections remain required structurally, but empty lists are valid. Warnings surface during build; errors only when deploying to production profiles. This preserves the "think about self-healing" prompt without blocking experimentation.
+The five sections remain required structurally, but empty lists are valid. Warnings surface during build; errors only when deploying to production profiles.
+
+**Validation semantics for non-empty sections:**
+- `cbr.context-features`: string identifiers. Validated at runtime when `RetrievalContext` is built — the CBR adapter looks up named feature extractors. Unknown feature names log warnings but don't fail (extensibility).
+- `cbr.resolution-strategies`: string identifiers matching `TypedFaultPolicy` action types registered in the fault policy tier hierarchy. Validated at build time.
+- `ras.situations`: each situation is validated against `SituationDefinition` record constraints (non-null situationId, non-empty eventTypes, non-null chainMode, non-null triggerAction with config for create-case).
 
 ### OQ2: Plugin versioning and vendor API drift
 
@@ -566,27 +713,16 @@ The spec doesn't address what happens when a vendor API changes. Plugin YAML ref
 - `plugin.version` field (semver) — already in the schema
 - `plugin.api-version` field — the vendor API version this plugin targets
 - Compatibility check at build time: warn if the deployed vendor API version doesn't match
-- Migration path: old and new plugin versions can coexist during rollout (multiple `NodeSpecFactory` registrations for the same `nodeType` with different api-versions)
+- Migration path: the existing `NodeSpecRegistry` (EXISTS) enforces type string uniqueness
+  (`resolve()` throws on unknown types). Supporting multiple versions of the same nodeType
+  requires extending the registry to accept a `(typeString, apiVersion)` compound key. This
+  is a new capability — the registry currently uses `Map<String, Class<? extends NodeSpec>>`.
 
-### OQ3: Template expression evaluation scoping
+### OQ3: Vendor-specific error classification
 
-`{spec.field}` template expressions appear in multiple contexts: `provisioner.create.body`, `actual-state.extract`, `ras.situations`. The evaluation context differs — `{spec.name}` in the provisioner refers to the NodeSpec being provisioned, but `{operationId}` in a `poll-until` refers to a value extracted from a previous step's response.
+A Cloudflare 429 (rate limit) and a K8s 429 (admission webhook rejection) have different semantics. The Layer 2 `retry` primitive uses HTTP status codes, which are ambiguous across vendors.
 
-**Needs explicit scoping rules:**
-- `{spec.*}` — always resolves from the NodeSpec record
-- `{response.*}` — resolves from the most recent rest-call/graphql-call response
-- `{step.N.*}` or `{previous.*}` — resolves from a named or previous step's extracted values
-- `{defaults.*}` — resolves from the plugin's `defaults:` block
-- `{node.*}` — resolves from the DesiredNode (nodeId, dependsOn targets)
-
-Build-time validation: every template expression must resolve to a known scope. Unresolved expressions fail the build.
-
-### OQ4: Vendor-specific error classification
-
-A Cloudflare 429 (rate limit) and a K8s 429 (admission webhook rejection) have different semantics. The `fault-policy.retryable` list uses HTTP status codes, which are ambiguous across vendors.
-
-**Needs:**
-- Optional `error-classifier` section per plugin that maps vendor-specific error responses to CaseHub fault categories:
+**Proposed:** Optional `error-classifier` section per plugin that maps vendor-specific error responses to semantic categories. This lives at the transport layer (Layer 2), keeping the graph-level fault policy (Layer 3) clean:
 
 ```yaml
 error-classifier:
@@ -606,12 +742,28 @@ error-classifier:
 
 This replaces the flat `retryable: [429]` with semantic classification. The CBR learning surface can then distinguish between "rate-limited and retried successfully" vs "rejected and escalated."
 
+## Issue #87 Requirements
+
+From [casehubio/casehub-ops#87](https://github.com/casehubio/casehub-ops/issues/87):
+
+| Requirement | Spec Section | Status |
+|---|---|---|
+| Java primitives (RestClient, GraphQlClient, AuthProvider, etc.) | §Layer 1 | Designed |
+| YAML primitives (rest-call, graphql-call, json-extract, etc.) | §Layer 2 | Designed |
+| 10 NodeSpec plugins (K8s, Cloudflare, Supabase, Fly.io, OCI, LE) | §Plugin Catalogue | Designed |
+| Plugin YAML schema with 5 required sections | §Layer 3 | Designed |
+| CBR integration per plugin | §Layer 3 CBR section | Designed |
+| RAS integration per plugin | §Layer 3 RAS section | Designed |
+| Testing (Kind-on-Podman, WireMock, real free-tier accounts) | §Testing Strategy | Designed |
+| Cross-repo architecture (desiredstate + ops) | §Architecture | Designed |
+
 ## References
 
-- `casehub-desiredstate` — YamlDesiredStateProcessor, NodeSpecFactory, NodeSpecRegistry, CbrFaultPolicy, YamlFaultPolicy
-- `casehub-ops/deployment` — DeploymentNodeProvisioner handler pattern, InfraBackend delegation
-- `casehub-ops/infra` — InfraWrappingFactory (NodeSpecFactory reference implementation)
-- `casehub-ras-api` — SituationDefinition, ChainMode, TriggerAction
+- `casehub-desiredstate` — YamlDesiredStateProcessor (EXISTS), NodeSpecFactory (EXISTS), NodeSpecRegistry (EXISTS), CbrFaultPolicy (EXISTS), ThresholdFaultPolicy (EXISTS), YamlFaultPolicy (EXISTS), YamlGraph (EXISTS), VariableResolver (EXISTS)
+- `casehub-ops/deployment` — DeploymentNodeProvisioner handler pattern (EXISTS), InfraBackend delegation (EXISTS)
+- `casehub-ops/infra` — InfraWrappingFactory (EXISTS, NodeSpecFactory reference implementation)
+- `casehub-ras-api` — SituationDefinition (EXISTS), ChainMode (EXISTS), TriggerAction (EXISTS), CaseTriggerConfig (EXISTS)
 - `docs/research/2026-09-08-self-healing-self-governing-infrastructure.md` — gap analysis, MAPE-K mapping
+- `docs/specs/issue-116-yaml-language-design/` — YAML language extensions design, interpolation model
 - Issue #86 — CrossplaneNodeProvisioner (future: delegate to Crossplane for provisioning)
 - Issue #87 — this work
