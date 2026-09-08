@@ -390,7 +390,7 @@ richer self-healing behaviour.
 plugin:
   name: k8s-deployment
   version: 1.0
-  nodeType: k8s/deployment
+  nodeType: k8s_deployment
   # EXISTS: nodeType must resolve to a registered @NodeTypeId
 
 auth:
@@ -403,7 +403,7 @@ defaults:
   namespace: default
 
 # ── Section 1: Actual State ──────────────────────────
-# Compiles to: ActualStateAdapter contribution for nodeType k8s/deployment
+# Compiles to: ActualStateAdapter contribution for nodeType k8s_deployment
 
 actual-state:
   list:
@@ -429,7 +429,7 @@ actual-state:
       ignore: [metadata.resourceVersion, status.observedGeneration]
 
 # ── Section 2: Provisioner ───────────────────────────
-# Compiles to: NodeProvisioner contribution for nodeType k8s/deployment
+# Compiles to: NodeProvisioner contribution for nodeType k8s_deployment
 # Receives ProvisionContext with tenancyId and approval state at runtime
 #
 # Idempotency: The reconciliation loop provides create-idempotency through
@@ -517,7 +517,7 @@ fault-policy:
   # For YAML plugins, review specs are Java records in casehub-ops-api — same pattern
   # as IoTReviewSpec (EXISTS: faultedNode + reason). Each plugin family needs a review
   # spec record registered via @NodeTypeId:
-  #   @NodeTypeId("k8s/deployment-review")
+  #   @NodeTypeId("k8s_deployment_review")
   #   public record K8sDeploymentReviewSpec(String action, NodeId faultedNode) implements NodeSpec {}
   #
   # The NodeProvisioner for the review type handles it as a no-op Success (review
@@ -526,13 +526,13 @@ fault-policy:
   tiers:
     - threshold: 3
       reviewNode:
-        type: k8s/deployment-review
+        type: k8s_deployment_review
         spec:
           action: restart-pod
           faultedNode: "${fault.nodeId}"
     - threshold: 5
       reviewNode:
-        type: k8s/deployment-review
+        type: k8s_deployment_review
         spec:
           action: escalate-human
           faultedNode: "${fault.nodeId}"
@@ -633,8 +633,8 @@ ras:
 
 | # | Plugin | nodeType | API Protocol | CaseHub Integration |
 |---|--------|----------|-------------|---------------------|
-| 1 | KubernetesDeployment | k8s/deployment | REST (K8s API) | Trust on cluster health; Engine case for degradation |
-| 2 | KubernetesService | k8s/service | REST (K8s API) | Blocks summarisation: endpoint events → service health |
+| 1 | KubernetesDeployment | k8s_deployment | REST (K8s API) | Trust on cluster health; Engine case for degradation |
+| 2 | KubernetesService | k8s_service | REST (K8s API) | Blocks summarisation: endpoint events → service health |
 | 3 | KubernetesIngress | k8s/ingress | REST (K8s API) | Pre-emptive: cert renewal 30 days before expiry |
 | 4 | KubernetesSecret | k8s/secret | REST (K8s API) | Ledger: tamper-evident rotation audit trail |
 | 5 | CloudflareDns | cloudflare/dns-record | REST (Cloudflare API) | Trust on propagation speed vs other DNS providers |
@@ -714,7 +714,7 @@ Existing vs proposed validations:
 - **Autocomplete:** `${spec.}` triggers field list for the declared nodeType
 - **Validation:** red squiggle on `${spec.nonexistent}`
 - **Rename:** rename a NodeSpec field in Java → schema regenerates → IDE flags all YAML files using the old name
-- **Navigate to definition:** `nodeType: k8s/deployment` → jump to `KubernetesDeploymentSpec.java`
+- **Navigate to definition:** `nodeType: k8s_deployment` → jump to `KubernetesDeploymentSpec.java`
 
 IntelliJ and VS Code plugins consume the generated JSON Schema. Plugin development is a future phase.
 
@@ -754,7 +754,7 @@ nodes:
     dependsOn: []
 
   api-server:
-    type: k8s/deployment
+    type: k8s_deployment
     spec:
       name: api-server
       image: myapp/api:latest
@@ -764,7 +764,7 @@ nodes:
     dependsOn: [myapp-db]
 
   api-service:
-    type: k8s/service
+    type: k8s_service
     spec:
       name: api-service
       port: 8080
@@ -818,7 +818,7 @@ lifecycle:
       completionCondition: allPresent
       nodes:
         api-server:
-          type: k8s/deployment
+          type: k8s_deployment
           spec:
             name: api-server
             image: myapp/api:latest
