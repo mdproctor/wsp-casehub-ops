@@ -144,6 +144,8 @@ base.setAll(overrides);
 NodeSpec merged = mapper.treeToValue(base, existingSpec.getClass());
 ```
 
+**Parse-time field validation:** At parse time, every key in the `fields` map is validated against the target `NodeSpec` type's Jackson-visible fields. Unknown field names (e.g., `treshold` instead of `threshold`) fail with a descriptive error at startup, not silently at runtime. The `AdaptationRule.fromSpecs()` factory performs this validation using the `ObjectMapper`'s `getSerializationConfig()` to introspect the target class's field names. The target class is determined by `nodeType` (or inferred from the matched base topology node).
+
 ### Scale Instance Count
 
 For a scale action with range [min, max], active situation confidence C, and trigger minConfidence T:
@@ -173,7 +175,11 @@ No `remove` action type exists — this is deliberate. The recompile-from-base p
 
 ### NodeId Collision Validation
 
-At parse time: (1) `target` node ID must not contain `~`, (2) no base topology node may match `{target}~{n}` for any n in [2, max].
+At parse time:
+
+1. **Scale actions:** `target` node ID must not contain `~`. No base topology node may match `{target}~{n}` for any n in [2, max].
+2. **Add actions:** all node IDs declared in `add` actions must be distinct from base topology node IDs. `ImmutableDesiredStateGraph.withNode()` silently overwrites existing nodes with the same `NodeId` — parse-time validation catches this before runtime. Additionally, node IDs across all `add` actions (across all adaptation rules) must be mutually distinct to prevent cross-rule overwrites.
+3. **Cross-action:** no `add` action node ID may match any `scale` action's derived ID pattern (`{target}~{n}`).
 
 ### Hysteresis and Cooldown
 
@@ -182,7 +188,13 @@ At parse time: (1) `target` node ID must not contain `~`, (2) no base topology n
 
 ### Conflict Detection
 
-Multiple simultaneously active adaptations modifying the same node: YAML declaration order defines precedence — later rules override earlier ones. Warning logged.
+Multiple simultaneously active adaptations modifying the same node: YAML declaration order defines precedence — later rules override earlier ones.
+
+Conflicts are observable via:
+- **Log warning** — includes rule name and target node ID
+- **Metric** — `desiredstate.adaptation.conflict.total` counter (tags: `tenancy_id`, `rule_name`, `node_id`). Alertable in Grafana for operations teams.
+
+Parse-time validation warns (not errors) when multiple adaptation rules target the same `nodeType`/`target` combination, since conflicts only materialise when the corresponding situations are simultaneously active.
 
 ---
 
@@ -225,11 +237,15 @@ public class DeploymentAdaptiveSituationRecompiler implements SituationRecompile
     @Inject DesiredStateGraphFactory factory;
 
     public void register(String tenancyId, DeploymentGoals goals,
-                         Map<String, Duration> situationClearanceWindows) {
+                         Map<String, Duration> situationClearanceWindows,
+                         List<ActiveSituation> activeSituations) {
         List<AdaptationRule> rules = AdaptationRule.fromSpecs(
             goals.adaptations(), compiler, mapper, factory);
-        tenantStates.put(tenancyId,
-            new TenantAdaptationState(goals, rules, situationClearanceWindows));
+        var state = new TenantAdaptationState(goals, rules, situationClearanceWindows);
+        for (ActiveSituation situation : activeSituations) {
+            state.updateSituation(situation);
+        }
+        tenantStates.put(tenancyId, state);
     }
 
     @Override
@@ -325,7 +341,14 @@ Same logic as the original spec — `shouldActivate()` handles hysteresis band a
 
 ### Registration
 
-When the deployment app bootstraps, it calls `register(tenancyId, goals, situationClearanceWindows)` to provide the base topology, adaptation rules, and per-situation clearance windows. The bootstrap bean constructs `situationClearanceWindows` from the `SituationDefinitionProvider`'s registrations — mapping each `situationId` to its `SituationDefinition.correlationWindow()`. This happens before `ReconciliationLoop.start()`.
+When the deployment app bootstraps, it calls `register(tenancyId, goals, situationClearanceWindows, activeSituations)` to provide the base topology, adaptation rules, per-situation clearance windows, and any already-active situations. The bootstrap bean:
+
+1. Constructs `situationClearanceWindows` from the `SituationDefinitionProvider`'s registrations — mapping each `situationId` to its `SituationDefinition.correlationWindow()`
+2. Queries `SituationSource.activeSituations(tenancyId)` for any situations that are already active (e.g., after a restart during volatile conditions)
+3. Calls `register(tenancyId, goals, situationClearanceWindows, activeSituations)`
+4. Calls `ReconciliationLoop.start()` with the adapted topology
+
+This ensures the system boots with the correct adapted topology — if the market is volatile at restart time, risk agents are scaled immediately, not after the next situation push.
 
 ### Key Differences from Original Spec
 
@@ -543,6 +566,12 @@ pipeline:
             count-value: HIGH
             op: ">="
             threshold: 5
+          - from: STABLE
+            to: ANOMALOUS
+            count-field: category
+            count-value: SPREAD_WIDENING
+            op: ">="
+            threshold: 5
           - from: VOLATILE
             to: ANOMALOUS
             count-field: category
@@ -727,14 +756,19 @@ The fault policy handles the case where re-provisioning repeatedly fails — esc
 
 ## Component 6: Reconciliation Triggering
 
-Simpler than the original spec. The runtime handles situation delivery via `SituationRecompilerEngine`:
+The `AdaptiveTopologyManager` observed `SituationChangeEvent` via CDI and called both `reconciliationTarget.updateDesired()` AND `reconciliationTarget.requestReconciliation()` — immediate reconciliation on every situation change.
 
-1. RAS detects a situation (e.g., `fsitrading.volatility-spike`)
-2. Runtime pushes `ActiveSituation` to `DeploymentAdaptiveSituationRecompiler.recompile()`
-3. Recompiler returns adapted graph via `CompilationResult.single()`
-4. Runtime calls `updateDesired()` and triggers reconciliation
+The `SituationRecompiler` SPI replaces this with a return-value contract: the recompiler returns `CompilationResult`, and the dispatch layer handles graph update and reconciliation triggering. The dispatch flow:
 
-**No custom wiring needed.** `requestReconciliation()` exists but is called by the runtime, not the domain module. No `SituationChangeEvent` CDI events. No periodic re-poll — the runtime handles delivery reliability.
+1. RAS detects a situation (e.g., `fsitrading.volatility-spike`) and fires `SituationChangeEvent`
+2. Dispatch layer observes the event, calls `SituationRecompilerEngine.recompile()`
+3. Engine iterates recompilers by priority; `DeploymentAdaptiveSituationRecompiler` returns adapted graph via `CompilationResult.single()`
+4. Dispatch layer calls `LifecycleManager.updateDesired(tenancyId, result)` — swaps graph atomically
+5. Dispatch layer calls `ReconciliationLoop.requestReconciliation(tenancyId)` — schedules immediate debounced reconciliation
+
+**Step 5 is critical.** `LifecycleManager.updateDesired()` only swaps the graph reference — it does NOT trigger reconciliation. Without an explicit `requestReconciliation()` call, the new graph takes effect only at the next periodic resync (up to 5 minutes away). For breach response, this latency is unacceptable.
+
+**Dispatch layer ownership:** The dispatch layer that bridges `SituationChangeEvent` to `SituationRecompilerEngine` lives in `casehub-desiredstate` runtime (part of desiredstate#49). The deployment module's `DeploymentAdaptiveSituationRecompiler` is a pure SPI implementation — it does not observe CDI events or call reconciliation methods directly.
 
 ### External Health Checks
 
@@ -753,9 +787,9 @@ These use real node IDs with real statuses — triggering immediate reconciliati
 
 | Time | Event | System Response | Observable |
 |---|---|---|---|
-| T0 | App starts | `register(tenancyId, goals, clearanceWindows)` → base topology: 2 strategy, 1 risk, 1 audit agent, 3 channels, 2 trust policies. All provisioned. | 4 agents in DB |
+| T0 | App starts | `register(tenancyId, goals, clearanceWindows, activeSituations)` → base topology (adapted if situations already active): 2 strategy, 1 risk, 1 audit agent, 3 channels, 2 trust policies. All provisioned. | 4 agents in DB |
 | T1 | strategy-agent dies | `ActualStateAdapter`: ABSENT. Planner: PROVISION step. Re-provisioned. | Agent reappears. Ledger records fault + recovery. |
-| T2 | Market volatility (price spikes) | Summarisation pipeline: STABLE → VOLATILE. Ganglion: `volatile-detected` × 2 → RAS situation `fsitrading.volatility-spike` (0.85). Recompiler: scale risk-agent to 3. | 3 risk agents. |
+| T2 | Market volatility (price spikes) | Summarisation pipeline: STABLE → VOLATILE. Ganglion: `volatile-detected` → RAS situation `fsitrading.volatility-spike` (0.85). Recompiler: scale risk-agent to 3. | 3 risk agents. |
 | T3 | Spread widening (anomaly) | Pipeline: VOLATILE → ANOMALOUS. Ganglion → `fsitrading.market-anomaly` (0.7). Recompiler: tighten trust 0.7 → 0.9. | Trust updated. Agents below 0.9 require human oversight. |
 | T4 | Volatility resolves | Pipeline: VOLATILE → STABLE. Ganglion chain no longer sustained — no new `volatile-detected` signals. After TTL expires (30 min), RAS resolves `volatility-spike`. Recompiler clears tracked situation, recompiles from base — no scaling adaptation. risk-agent~3, risk-agent~2 deprovisioned (LIFO). | Back to 1 risk agent. |
 | T5 | Breach detected | Ganglion → `fsitrading.active-breach` (0.99). Case created + recompiler: add forensics-agent + channel, tighten risk-assessment trust to 0.95. | 5 agents, new channel. Overnight-incident case active. |
@@ -801,7 +835,7 @@ These use real node IDs with real statuses — triggering immediate reconciliati
 11. **`FsiTradingEventTypes`** — CloudEvent type constants.
 12. **`FsiTradingSituationDefinitionProvider`** — 4 ganglia + 3 situation definitions.
 13. **`MarketConditionCloudEventPublisher`** — bridges MarketPulse L3 output to RAS CloudEvents (`io.casehub.fsitrading.market.*`).
-14. **Bootstrap bean** — loads YAML, constructs `situationClearanceWindows` from `FsiTradingSituationDefinitionProvider.registrations()`, calls `recompiler.register(tenancyId, goals, situationClearanceWindows)`, calls `reconciliationLoop.start()`.
+14. **Bootstrap bean** — loads YAML, constructs `situationClearanceWindows` from `FsiTradingSituationDefinitionProvider.registrations()`, queries `SituationSource.activeSituations(tenancyId)` for cold-start seeding, calls `recompiler.register(tenancyId, goals, situationClearanceWindows, activeSituations)`, then calls `reconciliationLoop.start()` with the adapted graph.
 
 ---
 
