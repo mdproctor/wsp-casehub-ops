@@ -626,8 +626,52 @@ This publisher subscribes to the `MarketPulseConfiguration` L3 (RegimeAssessment
 public final class FsiTradingEventTypes {
     public static final String SIGNAL = "io.casehub.fsitrading.situation.signal";
     public static final String CONDITION = "io.casehub.fsitrading.situation.condition";
+    public static final String SECURITY = "io.casehub.fsitrading.security.alert";
 }
 ```
+
+**Namespace design:** Market events and security events are separate concerns with separate event types:
+
+| Event type | Source | Consumed by |
+|---|---|---|
+| `io.casehub.fsitrading.market.*` | `MarketConditionCloudEventPublisher` | Summarisation pipeline (input) |
+| `io.casehub.fsitrading.situation.signal` | Summarisation L1 (threshold-classify) | `volatile-detected`, `anomalous-detected`, `stable-detected` ganglia |
+| `io.casehub.fsitrading.situation.condition` | Summarisation L2 (phase-detect) | `volatile-detected`, `anomalous-detected`, `stable-detected` ganglia |
+| `io.casehub.fsitrading.security.alert` | `SecurityAlertBridge` | `breach-signal` ganglion |
+
+Security alerts bypass the summarisation pipeline entirely — they go directly to the `breach-signal` ganglion. A breach is a security event, not a market condition.
+
+### Security Alert Bridge
+
+```java
+@ApplicationScoped
+public class SecurityAlertBridge {
+
+    @Inject CloudEventEmitter emitter;
+
+    public void onSecurityEvent(SecurityEvent event) {
+        if (event.severity() == Severity.CRITICAL) {
+            emitter.emit(CloudEventBuilder.v1()
+                .withType(FsiTradingEventTypes.SECURITY)
+                .withSource(URI.create("/fsitrading/security"))
+                .withData(Map.of(
+                    "category", "BREACH",
+                    "source", event.source(),
+                    "detail", event.detail(),
+                    "timestamp", event.timestamp().toString()))
+                .build());
+        }
+    }
+}
+```
+
+The `SecurityAlertBridge` emits `io.casehub.fsitrading.security.alert` CloudEvents when a CRITICAL severity security event occurs. Security events are produced by the fsitrading domain's existing infrastructure:
+
+- **Foundation module deregistration** — an agent is forcibly removed outside the reconciliation loop
+- **Trust policy violation** — an agent attempts an action beyond its trust threshold
+- **External SIEM integration** — security monitoring detects anomalous access patterns
+
+The bridge converts these internal security signals into CloudEvents consumable by the `breach-signal` ganglion. The ganglion requires `category: "BREACH"` — the bridge only emits for CRITICAL severity events, filtering out warnings and informational security events.
 
 ### Situation Definition Provider
 
@@ -654,7 +698,7 @@ public class FsiTradingSituationDefinitionProvider implements SituationDefinitio
                 var d = data(ctx);
                 return d != null && "STABLE".equals(d.get("to"));
             }, 0.9),
-            ganglion("breach-signal", FsiTradingEventTypes.SIGNAL, ctx -> {
+            ganglion("breach-signal", FsiTradingEventTypes.SECURITY, ctx -> {
                 var d = data(ctx);
                 return d != null && "BREACH".equals(d.get("category"));
             }, 0.99)
@@ -692,7 +736,7 @@ public class FsiTradingSituationDefinitionProvider implements SituationDefinitio
             new SituationRegistration(
                 new SituationDefinition(
                     ACTIVE_BREACH,
-                    Set.of(FsiTradingEventTypes.SIGNAL),
+                    Set.of(FsiTradingEventTypes.SECURITY),
                     Duration.ofHours(2),
                     null,
                     new ChainMode.Count("breach-signal", 1),
@@ -728,7 +772,7 @@ public class FsiTradingSituationDefinitionProvider implements SituationDefinitio
 }
 ```
 
-The `ganglion()` helper follows the same pattern as `DeploymentTopologySituationDefinitionProvider.ganglion()` in ops #84, parameterised with `eventType` since fsitrading uses both `CONDITION` and `SIGNAL` event types (unlike deployment-monitoring which hardcodes `PHASE`).
+The `ganglion()` helper follows the same pattern as `DeploymentTopologySituationDefinitionProvider.ganglion()` in ops #84, parameterised with `eventType` since fsitrading uses `CONDITION`, `SIGNAL`, and `SECURITY` event types (unlike deployment-monitoring which hardcodes `PHASE`).
 
 ### Situation Semantics
 
@@ -834,10 +878,11 @@ These use real node IDs with real statuses — triggering immediate reconciliati
 
 9. **`casehub-deployment.yaml`** — agent topology declaration.
 10. **`fsitrading-market-monitoring.yaml`** — summarisation pipeline (L1 threshold-classify, L2 phase-detect).
-11. **`FsiTradingEventTypes`** — CloudEvent type constants.
+11. **`FsiTradingEventTypes`** — CloudEvent type constants (`SIGNAL`, `CONDITION`, `SECURITY`).
 12. **`FsiTradingSituationDefinitionProvider`** — 4 ganglia + 3 situation definitions.
 13. **`MarketConditionCloudEventPublisher`** — bridges MarketPulse L3 output to RAS CloudEvents (`io.casehub.fsitrading.market.*`).
-14. **Bootstrap bean** — loads YAML, constructs `situationClearanceWindows` from `FsiTradingSituationDefinitionProvider.registrations()`, queries `SituationSource.activeSituations(tenancyId)` for cold-start seeding, calls `recompiler.register(tenancyId, goals, situationClearanceWindows, activeSituations)`, then calls `reconciliationLoop.start()` with the adapted graph.
+14. **`SecurityAlertBridge`** — emits `io.casehub.fsitrading.security.alert` CloudEvents when CRITICAL-severity security events occur. Consumed by the `breach-signal` ganglion.
+15. **Bootstrap bean** — loads YAML, constructs `situationClearanceWindows` from `FsiTradingSituationDefinitionProvider.registrations()`, queries `SituationSource.activeSituations(tenancyId)` for cold-start seeding, calls `recompiler.register(tenancyId, goals, situationClearanceWindows, activeSituations)`, then calls `reconciliationLoop.start()` with the adapted graph.
 
 ---
 
