@@ -44,7 +44,7 @@ Deep research (26 sources, 109 agents, adversarial verification — 10 confirmed
 
 ## Component 1: Adaptive YAML Format
 
-*Unchanged from original spec.* The deployment YAML gains an `adaptations:` section:
+*Unchanged from original spec.* The deployment YAML gains an `adaptations:` section. Note: situation IDs in this example are generic for illustration — actual deployments use domain-qualified IDs (e.g., `fsitrading.volatility-spike`) as shown in Component 3.
 
 ```yaml
 agents:
@@ -202,7 +202,6 @@ The runtime's `SituationRecompilerEngine` pushes each `ActiveSituation` (from `i
 public class DeploymentAdaptiveSituationRecompiler implements SituationRecompiler {
 
     @Inject DeploymentGoalCompiler compiler;
-    @Inject DesiredStateGraphFactory graphFactory;
 
     private final ConcurrentHashMap<String, TenantAdaptationState> tenantStates =
         new ConcurrentHashMap<>();
@@ -280,7 +279,7 @@ The `SituationRecompiler` is called per-situation. To apply all active situation
 
 1. `updateSituation(situation)` — upserts the situation into the tracked set (keyed by `situationId`)
 2. `activeSituationFor(rule)` — looks up the tracked situation matching `rule.trigger().situation()`
-3. `clearAbsentSituations()` — after processing, mark situations as absent if their `lastSignal` is older than the resync window (5 minutes). Absent situations with cooldown are retained until cooldown expires.
+3. `clearAbsentSituations()` — after processing, mark situations as absent if their `lastSignal` is older than `ReconciliationLoop.DEFAULT_RESYNC` (5 minutes). Absent situations with cooldown are retained until cooldown expires.
 
 This ensures the recompiler has a complete view of all active situations, not just the one being pushed in this call.
 
