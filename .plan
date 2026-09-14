@@ -10,6 +10,7 @@ covers: 25
 design-repo: project
 design-section-hashes: 
 flyway-next-v: unknown
+batch2_status: 
 
 ## Queue
 - [ ] casehubio/casehub-ops#25 — Issue #25 ← active
@@ -17,9 +18,9 @@ flyway-next-v: unknown
     - [x] Task 1: Extend TenantAdaptationState
     - [x] Task 2: Implement DeploymentAdaptiveSituationRecompiler
     - [x] Task 3: Remove AdaptiveTopologyManager
-  - [ ] Batch 2: fsitrading-Events
-    - [ ] Task 4: EventTypes+SecurityEvent+Bridge
-    - [ ] Task 5: MarketConditionPublisher
+  - [x] Batch 2: fsitrading-Events
+    - [x] Task 4: EventTypes+SecurityEvent+Bridge
+    - [x] Task 5: MarketConditionPublisher
   - [ ] Batch 3: fsitrading-RAS
     - [ ] Task 6: Summarisation pipeline YAML
     - [ ] Task 7: SituationDefinitionProvider
