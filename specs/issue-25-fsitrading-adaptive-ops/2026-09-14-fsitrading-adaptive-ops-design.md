@@ -542,7 +542,7 @@ pipeline:
             category: NORMAL
             severity: LOW
       emit:
-        cloud-event-type: io.casehub.fsitrading.market.signal
+        cloud-event-type: io.casehub.fsitrading.situation.signal
 
     - name: conditions
       grouping:
@@ -591,7 +591,7 @@ pipeline:
             op: "=="
             threshold: 0
       emit:
-        cloud-event-type: io.casehub.fsitrading.market.condition
+        cloud-event-type: io.casehub.fsitrading.situation.condition
 ```
 
 ### Market Event Source
