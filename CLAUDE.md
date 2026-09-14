@@ -1,1 +1,0 @@
-/Users/mdproctor/claude/casehub/ops/CLAUDE.md
