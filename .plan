@@ -13,8 +13,5 @@ flyway-next-v: none
 
 ## Queue
 - [ ] casehubio/casehub-ops#84 — Issue #84 ← active
-  - [ ] Batch 1: Pipeline Foundation
-    - [ ] Task 1: YAML Pipeline + Dependencies + CloudEvent Types
-  - [ ] Batch 2: RAS + Integration
-    - [ ] Task 2: Deployment Topology RAS Situation Definitions
-    - [ ] Task 3: End-to-End Integration Test
+  - [ ] Batch 1: Example
+    - [ ] Task 1: Deployment Monitoring Example Module
