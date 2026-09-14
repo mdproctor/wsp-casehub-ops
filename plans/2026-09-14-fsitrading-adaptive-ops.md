@@ -258,6 +258,7 @@ Create the class implementing `SituationRecompiler` per the spec's §Component 2
 - `ConcurrentHashMap<String, TenantAdaptationState>` per-tenant state
 - `register()` method for bootstrap
 - `recompile()` — updates tracked situation, recompiles from base with all active situations, structural graph comparison
+- Note: `situationResolved()` is deferred — requires cross-repo `casehub-desiredstate-api` change first (new default method). Implement after that lands.
 - `graphsEqual()` — compares `nodes()` and `dependencies()` maps
 
 - [ ] **Step 4: Run test — verify pass**
@@ -775,6 +776,9 @@ public class FsiTradingDeploymentBootstrap {
         String tenancyId = goals.tenancyId() != null
             ? goals.tenancyId() : TenancyConstants.DEFAULT_TENANT_ID;
         recompiler.register(tenancyId, goals, clearanceWindows);
+
+        var graph = compiler.compile(goals, graphFactory);
+        lifecycleManager.start(tenancyId, graph);
     }
 }
 ```
@@ -843,7 +847,13 @@ void fullAdaptationLifecycle() {
     // trust tightened
 
     // 4. Clear volatility — scale down, trust still tightened
-    // (simulate by waiting past clearance or calling clearSituation)
+    recompiler.clearSituationForTenant("t1", "volatility-spike");
+    var result3 = recompiler.recompile("t1", adapted, emptyActual,
+        anomaly, graphFactory);
+    assertThat(result3).isPresent();
+    var afterClear = result3.get();
+    // risk-agent~2/~3 no longer present (scaling removed)
+    // trust still tightened (market-anomaly still active)
 }
 ```
 
