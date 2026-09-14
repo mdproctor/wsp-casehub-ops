@@ -608,7 +608,7 @@ public class MarketConditionCloudEventPublisher {
 
     public void onRegimeAssessment(RegimeAssessment assessment) {
         emitter.emit(CloudEventBuilder.v1()
-            .withType("io.casehub.fsitrading.market.condition")
+            .withType("io.casehub.fsitrading.market.assessment")
             .withSource(URI.create("/fsitrading/market-pulse"))
             .withData(assessment.toCloudEventData())
             .build());
@@ -618,12 +618,14 @@ public class MarketConditionCloudEventPublisher {
 
 This publisher subscribes to the `MarketPulseConfiguration` L3 (RegimeAssessment) output and emits CloudEvents that the RAS summarisation pipeline consumes. The summarisation pipeline then applies its own windowed aggregation and phase detection on top of these events — a second stage of summarisation that produces the ganglion-consumable signals.
 
+**Namespace separation:** following the deployment-monitoring pattern (`io.casehub.desiredstate.node.*` → `io.casehub.ops.deployment.anomaly`/`.phase`), the input and output namespaces are disjoint. The publisher emits under `io.casehub.fsitrading.market.*` (pipeline input), while the pipeline emits under `io.casehub.fsitrading.situation.*` (pipeline output consumed by ganglia). This prevents re-ingestion — `CloudEventIngestionAdapter` filters by `startsWith(typePrefix)` with no self-emission guard.
+
 ### Event Types
 
 ```java
 public final class FsiTradingEventTypes {
-    public static final String SIGNAL = "io.casehub.fsitrading.market.signal";
-    public static final String CONDITION = "io.casehub.fsitrading.market.condition";
+    public static final String SIGNAL = "io.casehub.fsitrading.situation.signal";
+    public static final String CONDITION = "io.casehub.fsitrading.situation.condition";
 }
 ```
 
