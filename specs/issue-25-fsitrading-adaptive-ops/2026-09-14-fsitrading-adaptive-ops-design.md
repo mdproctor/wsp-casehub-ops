@@ -31,11 +31,11 @@ Deep research (26 sources, 109 agents, adversarial verification — 10 confirmed
 |---|---|---|
 | Static topology (base desired state) | `DeploymentGoalCompiler` | Compiles YAML into `DesiredStateGraph` |
 | Planned adaptation (conditions change) | `DeploymentAdaptiveSituationRecompiler` | Implements `SituationRecompiler` SPI — receives active situations, recompiles graph |
-| Unplanned response (node failure) | ReconciliationLoop | Re-provisions ABSENT nodes automatically; `FaultPolicy` returns `List.of()` |
+| Unplanned response (node failure) | ReconciliationLoop + `FaultPolicy` | Re-provisions ABSENT nodes automatically; `FaultPolicy` escalates after repeated failures (tier-3 review node) |
 
 **Layer separation:**
 
-- **`SituationRecompiler` SPI** in `casehub-desiredstate-api` — domain-agnostic contract. The runtime pushes each `ActiveSituation` (from `casehub-ras-api`) to all registered recompilers. Already exists (desiredstate#49, closed).
+- **`SituationRecompiler` SPI** in `casehub-desiredstate-api` — domain-agnostic contract. The runtime iterates registered recompilers by ascending priority and returns the first non-empty result (chain-of-responsibility, first-match-wins). Already exists (desiredstate#49, closed).
 - **`DeploymentAdaptiveSituationRecompiler`** in `casehub-ops-deployment` — deployment-domain-specific implementation that applies YAML-defined adaptation rules.
 - **Situation detection** in `casehub-fsitrading` — Ganglion detectors + summarisation pipeline for market conditions. Adapted from the #84 pattern; the `ganglion()` helper adds a parameterised `eventType` parameter (fsitrading uses both `CONDITION` and `SIGNAL` event types, unlike deployment-monitoring which hardcodes `PHASE`).
 - **`ReconciliationLoop` unchanged** — `start()`, `updateDesired()`, `requestReconciliation()` all exist and work as designed.
@@ -272,14 +272,22 @@ public class DeploymentAdaptiveSituationRecompiler implements SituationRecompile
 
             state.clearAbsentSituations();
 
-            if (adapted.equals(base)) {
+            if (graphsEqual(adapted, base)) {
                 return Optional.empty();
             }
             return Optional.of(CompilationResult.single(adapted));
         }
     }
+
+    private static boolean graphsEqual(DesiredStateGraph a, DesiredStateGraph b) {
+        if (a == b) return true;
+        if (a == null || b == null) return false;
+        return a.nodes().equals(b.nodes()) && a.dependencies().equals(b.dependencies());
+    }
 }
 ```
+
+`graphsEqual()` performs structural comparison — node maps and dependency sets — rather than identity comparison. `ImmutableDesiredStateGraph` has no `equals()` override (it inherits `Object.equals()`, which is identity-based). Structural comparison prevents unnecessary graph updates when rules fire but produce a topology identical to the current desired state.
 
 ### Per-Tenant State
 
@@ -625,14 +633,14 @@ public class FsiTradingSituationDefinitionProvider implements SituationDefinitio
     @Override
     public List<SituationRegistration> registrations() {
         return List.of(
-            // volatility-spike: sustained volatile state (2 consecutive detections)
+            // volatility-spike: volatile phase detected
             new SituationRegistration(
                 new SituationDefinition(
                     VOLATILITY_SPIKE,
                     Set.of(FsiTradingEventTypes.CONDITION),
                     Duration.ofMinutes(30),
                     null,
-                    new ChainMode.Streak("volatile-detected", 2),
+                    new ChainMode.Count("volatile-detected", 1),
                     new TriggerAction.NotifyOnly(),
                     new TriggerMode.Repeating(Duration.ofMinutes(5))),
                 null),
@@ -695,7 +703,7 @@ The `ganglion()` helper follows the same pattern as `DeploymentTopologySituation
 
 | Situation | Chain | TTL | Action | Mode | Adaptation |
 |---|---|---|---|---|---|
-| `fsitrading.volatility-spike` | `Streak("volatile-detected", 2)` | 30 min | `NotifyOnly` | `Repeating(5m)` | Scale risk agents 1→5 |
+| `fsitrading.volatility-spike` | `Count("volatile-detected", 1)` | 30 min | `NotifyOnly` | `Repeating(5m)` | Scale risk agents 1→5 |
 | `fsitrading.market-anomaly` | `Count("anomalous-detected", 1)` | 15 min | `NotifyOnly` | `Repeating(2m)` | Tighten trade-execution trust to 0.9 |
 | `fsitrading.active-breach` | `Count("breach-signal", 1)` | 2 hours | `CreateCase` | `FireOnce` | Add forensics agent + channel, tighten risk-assessment trust to 0.95 |
 
@@ -788,12 +796,12 @@ These use real node IDs with real statuses — triggering immediate reconciliati
 
 ### casehub-fsitrading
 
-6. **`casehub-deployment.yaml`** — agent topology declaration.
-7. **`fsitrading-market-monitoring.yaml`** — summarisation pipeline (L1 threshold-classify, L2 phase-detect).
-8. **`FsiTradingEventTypes`** — CloudEvent type constants.
-9. **`FsiTradingSituationDefinitionProvider`** — 4 ganglia + 3 situation definitions.
-10. **`MarketConditionCloudEventPublisher`** — bridges MarketPulse L3 output to RAS CloudEvents (`io.casehub.fsitrading.market.*`).
-11. **Bootstrap bean** — loads YAML, constructs `situationClearanceWindows` from `FsiTradingSituationDefinitionProvider.registrations()`, calls `recompiler.register(tenancyId, goals, situationClearanceWindows)`, calls `reconciliationLoop.start()`.
+9. **`casehub-deployment.yaml`** — agent topology declaration.
+10. **`fsitrading-market-monitoring.yaml`** — summarisation pipeline (L1 threshold-classify, L2 phase-detect).
+11. **`FsiTradingEventTypes`** — CloudEvent type constants.
+12. **`FsiTradingSituationDefinitionProvider`** — 4 ganglia + 3 situation definitions.
+13. **`MarketConditionCloudEventPublisher`** — bridges MarketPulse L3 output to RAS CloudEvents (`io.casehub.fsitrading.market.*`).
+14. **Bootstrap bean** — loads YAML, constructs `situationClearanceWindows` from `FsiTradingSituationDefinitionProvider.registrations()`, calls `recompiler.register(tenancyId, goals, situationClearanceWindows)`, calls `reconciliationLoop.start()`.
 
 ---
 
