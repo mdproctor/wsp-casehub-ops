@@ -618,17 +618,183 @@ Refs casehubio/casehub-ops#25
 Co-Authored-By: Claude Opus 4.6 (1M context) <noreply@anthropic.com>"
 ```
 
-### Task 7: FsiTradingSituationDefinitionProvider
+### Task 7a: YamlSituationDefinitionProvider — generic base class (ops)
 
 **Files:**
+- Create: `deployment/src/main/java/io/casehub/ops/deployment/adaptation/YamlSituationDefinitionProvider.java`
+- Test: `deployment/src/test/java/io/casehub/ops/deployment/adaptation/YamlSituationDefinitionProviderTest.java`
+- Create: `deployment/src/test/resources/test-situation-definitions.yaml` (test fixture)
+
+**Interfaces:**
+- Consumes: `SituationDefinitionProvider` (ras-api), `GanglionDescriptor`, `SituationRegistration`, `SituationDefinition`, `ChainMode.Count`, `TriggerAction.NotifyOnly`, `TriggerAction.CreateCase`, `TriggerMode.Repeating`, `TriggerMode.FireOnce`, `LambdaExpression` (platform-api)
+- Produces: Generic YAML-to-SituationDefinitionProvider parser. Subclasses provide classpath resource path, get fully wired `ganglionDescriptors()` and `registrations()`.
+
+YAML format — ganglia use field-equality matching (`match: {field, value}`), situations specify chain mode, trigger action, and trigger mode as typed objects:
+
+```yaml
+ganglia:
+  - id: volatile-detected
+    eventType: io.casehub.fsitrading.situation.condition
+    match: { field: to, value: VOLATILE }
+    confidence: 0.8
+
+situations:
+  - id: fsitrading.volatility-spike
+    eventTypes: [io.casehub.fsitrading.situation.condition]
+    correlationWindow: PT30M
+    chain: { type: count, ganglionId: volatile-detected, count: 1 }
+    trigger: { type: notify-only }
+    mode: { type: repeating, interval: PT5M }
+```
+
+- [ ] **Step 1: Create test YAML fixture**
+
+```yaml
+# test-situation-definitions.yaml
+ganglia:
+  - id: test-signal
+    eventType: io.test.signal
+    match: { field: status, value: ACTIVE }
+    confidence: 0.9
+
+situations:
+  - id: test.situation-one
+    eventTypes: [io.test.signal]
+    correlationWindow: PT10M
+    chain: { type: count, ganglionId: test-signal, count: 1 }
+    trigger: { type: notify-only }
+    mode: { type: repeating, interval: PT1M }
+```
+
+- [ ] **Step 2: Write failing test — loads ganglia from YAML**
+
+```java
+@Test
+void loadsGangliaFromYaml() {
+    var provider = new YamlSituationDefinitionProvider(
+        "/test-situation-definitions.yaml") {};
+    assertThat(provider.ganglionDescriptors()).hasSize(1);
+    var g = provider.ganglionDescriptors().get(0);
+    assertThat(g.id()).isEqualTo("test-signal");
+}
+```
+
+- [ ] **Step 3: Implement `YamlSituationDefinitionProvider`**
+
+Abstract class that:
+1. Reads YAML from classpath resource in constructor
+2. Parses `ganglia:` list → `GanglionDescriptor.ExpressionRules` with field-equality `LambdaExpression`
+3. Parses `situations:` list → `SituationRegistration` with typed `ChainMode`, `TriggerAction`, `TriggerMode`
+4. Exposes `ganglionDescriptors()` and `registrations()` per SPI
+
+Key parsing: `match: {field, value}` → `LambdaExpression<>(ctx -> value.equals(data(ctx).get(field)))`
+
+- [ ] **Step 4: Run test — verify pass**
+
+- [ ] **Step 5: Write test — loads situations with all trigger/mode types**
+
+Add to test fixture: a `create-case` trigger and `fire-once` mode entry. Verify all types parse correctly.
+
+- [ ] **Step 6: Run all tests**
+
+Run: `mvn --batch-mode -o test -pl deployment -Dtest=YamlSituationDefinitionProviderTest`
+Expected: PASS
+
+- [ ] **Step 7: Commit**
+
+```bash
+git add deployment/
+git commit -m "feat(#25): add YamlSituationDefinitionProvider — YAML-based situation definitions
+
+Generic base class that parses ganglia + situation definitions from YAML.
+Field-equality match conditions, typed chain/trigger/mode parsing.
+Subclasses provide classpath resource path.
+
+Refs #25
+
+Co-Authored-By: Claude Opus 4.6 (1M context) <noreply@anthropic.com>"
+```
+
+### Task 7b: fsitrading situation definitions YAML + thin provider
+
+**Files:**
+- Create: `fsitrading/app/src/main/resources/META-INF/situation-definitions/fsitrading-situations.yaml`
 - Create: `fsitrading/app/src/main/java/io/casehub/fsitrading/app/situation/FsiTradingSituationDefinitionProvider.java`
 - Test: `fsitrading/app/src/test/java/io/casehub/fsitrading/app/situation/FsiTradingSituationDefinitionProviderTest.java`
 
 **Interfaces:**
-- Consumes: `SituationDefinitionProvider` (ras-api), `GanglionDescriptor`, `SituationRegistration`, `SituationDefinition`, `ChainMode.Count`, `TriggerAction.NotifyOnly`, `TriggerAction.CreateCase`, `TriggerMode.Repeating`, `TriggerMode.FireOnce`
-- Produces: 4 ganglia (`volatile-detected`, `anomalous-detected`, `stable-detected`, `breach-signal`) + 3 situation definitions (`volatility-spike`, `market-anomaly`, `active-breach`)
+- Consumes: `YamlSituationDefinitionProvider` (from ops-deployment Task 7a)
+- Produces: 4 ganglia + 3 situations, loaded from YAML. Constants `VOLATILITY_SPIKE`, `MARKET_ANOMALY`, `ACTIVE_BREACH` for cross-reference.
 
-- [ ] **Step 1: Write failing test — correct number of ganglia and registrations**
+- [ ] **Step 1: Create `fsitrading-situations.yaml`**
+
+```yaml
+ganglia:
+  - id: volatile-detected
+    eventType: io.casehub.fsitrading.situation.condition
+    match: { field: to, value: VOLATILE }
+    confidence: 0.8
+
+  - id: anomalous-detected
+    eventType: io.casehub.fsitrading.situation.condition
+    match: { field: to, value: ANOMALOUS }
+    confidence: 0.95
+
+  - id: stable-detected
+    eventType: io.casehub.fsitrading.situation.condition
+    match: { field: to, value: STABLE }
+    confidence: 0.9
+
+  - id: breach-signal
+    eventType: io.casehub.fsitrading.security.alert
+    match: { field: category, value: BREACH }
+    confidence: 0.99
+
+situations:
+  - id: fsitrading.volatility-spike
+    eventTypes: [io.casehub.fsitrading.situation.condition]
+    correlationWindow: PT30M
+    chain: { type: count, ganglionId: volatile-detected, count: 1 }
+    trigger: { type: notify-only }
+    mode: { type: repeating, interval: PT5M }
+
+  - id: fsitrading.market-anomaly
+    eventTypes: [io.casehub.fsitrading.situation.condition]
+    correlationWindow: PT15M
+    chain: { type: count, ganglionId: anomalous-detected, count: 1 }
+    trigger: { type: notify-only }
+    mode: { type: repeating, interval: PT2M }
+
+  - id: fsitrading.active-breach
+    eventTypes: [io.casehub.fsitrading.security.alert]
+    correlationWindow: PT2H
+    chain: { type: count, ganglionId: breach-signal, count: 1 }
+    trigger:
+      type: create-case
+      namespace: fsitrading
+      name: overnight-incident
+      version: "1.0"
+    mode: { type: fire-once }
+```
+
+- [ ] **Step 2: Create thin provider subclass**
+
+```java
+@ApplicationScoped
+public class FsiTradingSituationDefinitionProvider
+        extends YamlSituationDefinitionProvider {
+
+    public static final String VOLATILITY_SPIKE = "fsitrading.volatility-spike";
+    public static final String MARKET_ANOMALY = "fsitrading.market-anomaly";
+    public static final String ACTIVE_BREACH = "fsitrading.active-breach";
+
+    public FsiTradingSituationDefinitionProvider() {
+        super("/META-INF/situation-definitions/fsitrading-situations.yaml");
+    }
+}
+```
+
+- [ ] **Step 3: Write test — correct counts**
 
 ```java
 @Test
@@ -639,13 +805,7 @@ void providesCorrectGanglionAndRegistrationCounts() {
 }
 ```
 
-- [ ] **Step 2: Implement `FsiTradingSituationDefinitionProvider`**
-
-Per spec §Component 4 — full implementation with parameterised `ganglion()` helper, 3 registrations using `ChainMode.Count`, `TriggerAction.NotifyOnly`/`CreateCase`, `TriggerMode.Repeating`/`FireOnce`.
-
-- [ ] **Step 3: Run test — verify pass**
-
-- [ ] **Step 4: Write test — verify situation IDs match constants**
+- [ ] **Step 4: Write test — situation IDs match constants**
 
 ```java
 @Test
@@ -661,40 +821,19 @@ void registrationSituationIdsMatchConstants() {
 }
 ```
 
-- [ ] **Step 5: Write test — verify event type filters are correct**
-
-```java
-@Test
-void registrationEventTypesAreCorrect() {
-    var provider = new FsiTradingSituationDefinitionProvider();
-    var regs = provider.registrations();
-
-    // volatility and anomaly use CONDITION events
-    assertThat(regs.get(0).definition().eventTypes())
-        .containsExactly(FsiTradingEventTypes.CONDITION);
-    assertThat(regs.get(1).definition().eventTypes())
-        .containsExactly(FsiTradingEventTypes.CONDITION);
-    // breach uses SECURITY events
-    assertThat(regs.get(2).definition().eventTypes())
-        .containsExactly(FsiTradingEventTypes.SECURITY);
-}
-```
-
-- [ ] **Step 6: Run all provider tests**
+- [ ] **Step 5: Run tests**
 
 Run: `mvn --batch-mode -o test -pl fsitrading/app -Dtest=FsiTradingSituationDefinitionProviderTest`
 Expected: PASS
 
-- [ ] **Step 7: Commit**
+- [ ] **Step 6: Commit**
 
 ```bash
 git -C /Users/mdproctor/claude/casehub/slots/193/fsitrading add .
-git -C /Users/mdproctor/claude/casehub/slots/193/fsitrading commit -m "feat(#25): add FsiTradingSituationDefinitionProvider
+git -C /Users/mdproctor/claude/casehub/slots/193/fsitrading commit -m "feat(#25): add YAML-based fsitrading situation definitions
 
-4 ganglia: volatile-detected, anomalous-detected, stable-detected,
-breach-signal. 3 situations: volatility-spike (Count+NotifyOnly+Repeating),
-market-anomaly (Count+NotifyOnly+Repeating), active-breach
-(Count+CreateCase+FireOnce).
+4 ganglia + 3 situations defined in fsitrading-situations.yaml.
+Thin FsiTradingSituationDefinitionProvider extends YamlSituationDefinitionProvider.
 
 Refs casehubio/casehub-ops#25
 
