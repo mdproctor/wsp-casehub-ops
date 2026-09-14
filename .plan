@@ -13,10 +13,10 @@ flyway-next-v: unknown
 
 ## Queue
 - [ ] casehubio/casehub-ops#25 — Issue #25 ← active
-  - [ ] Batch 1: Ops-Recompiler
-    - [ ] Task 1: Extend TenantAdaptationState
-    - [ ] Task 2: Implement DeploymentAdaptiveSituationRecompiler
-    - [ ] Task 3: Remove AdaptiveTopologyManager
+  - [x] Batch 1: Ops-Recompiler
+    - [x] Task 1: Extend TenantAdaptationState
+    - [x] Task 2: Implement DeploymentAdaptiveSituationRecompiler
+    - [x] Task 3: Remove AdaptiveTopologyManager
   - [ ] Batch 2: fsitrading-Events
     - [ ] Task 4: EventTypes+SecurityEvent+Bridge
     - [ ] Task 5: MarketConditionPublisher
