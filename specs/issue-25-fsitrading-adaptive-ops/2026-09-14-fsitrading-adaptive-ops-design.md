@@ -317,7 +317,7 @@ Same logic as the original spec — `shouldActivate()` handles hysteresis band a
 
 ### Registration
 
-When the deployment app bootstraps, it calls `register(tenancyId, goals)` to provide the base topology and adaptation rules. This happens before `ReconciliationLoop.start()`.
+When the deployment app bootstraps, it calls `register(tenancyId, goals, situationClearanceWindows)` to provide the base topology, adaptation rules, and per-situation clearance windows. The bootstrap bean constructs `situationClearanceWindows` from the `SituationDefinitionProvider`'s registrations — mapping each `situationId` to its `SituationDefinition.correlationWindow()`. This happens before `ReconciliationLoop.start()`.
 
 ### Key Differences from Original Spec
 
@@ -461,7 +461,7 @@ adaptations:
 
 | Agent | Purpose | Count |
 |---|---|---|
-| `strategy-agent` / `strategy-agent-2` | Evaluate trading strategies, overnight coverage | 2 (base) |
+| `strategy-agent` / `strategy-agent-2` | Evaluate trading strategies, overnight coverage | 2 (base, static — redundancy pair, not scaled adaptively) |
 | `risk-agent` | Monitor risk exposure, position limits | 1 (scales to 5 on volatility) |
 | `audit-agent` | Trade audit trail, regulatory compliance | 1 (always on) |
 | `forensics-agent` | Breach investigation | 0 (added on active-breach) |
@@ -745,7 +745,7 @@ These use real node IDs with real statuses — triggering immediate reconciliati
 
 | Time | Event | System Response | Observable |
 |---|---|---|---|
-| T0 | App starts | `register(tenancyId, goals)` → base topology: 2 strategy, 1 risk, 1 audit agent, 3 channels, 2 trust policies. All provisioned. | 4 agents in DB |
+| T0 | App starts | `register(tenancyId, goals, clearanceWindows)` → base topology: 2 strategy, 1 risk, 1 audit agent, 3 channels, 2 trust policies. All provisioned. | 4 agents in DB |
 | T1 | strategy-agent dies | `ActualStateAdapter`: ABSENT. Planner: PROVISION step. Re-provisioned. | Agent reappears. Ledger records fault + recovery. |
 | T2 | Market volatility (price spikes) | Summarisation pipeline: STABLE → VOLATILE. Ganglion: `volatile-detected` × 2 → RAS situation `fsitrading.volatility-spike` (0.85). Recompiler: scale risk-agent to 3. | 3 risk agents. |
 | T3 | Spread widening (anomaly) | Pipeline: VOLATILE → ANOMALOUS. Ganglion → `fsitrading.market-anomaly` (0.7). Recompiler: tighten trust 0.7 → 0.9. | Trust updated. Agents below 0.9 require human oversight. |
@@ -776,7 +776,15 @@ These use real node IDs with real statuses — triggering immediate reconciliati
 **New (introduced by this spec):**
 
 5. **`DeploymentAdaptiveSituationRecompiler`** — implements `SituationRecompiler`, lives in `casehub-ops-deployment`.
-6. **`TenantAdaptationState`** — per-tenant state: goals, rules, tracked situations, hysteresis.
+
+**Modified (by this spec):**
+
+6. **`TenantAdaptationState`** — exists in `io.casehub.ops.deployment.adaptation`. Adds situation tracking fields and methods; replaces `clearAbsentSituations(Set<String>)` with timestamp-based clearing. See §Per-Tenant State for the full modification list.
+
+**Deleted (by this spec):**
+
+7. **`AdaptiveTopologyManager`** — replaced by `DeploymentAdaptiveSituationRecompiler`. See §Migration.
+8. **`StubSituationSource`** — `SituationSource` no longer needed. See §Migration.
 
 ### casehub-fsitrading
 
@@ -784,7 +792,8 @@ These use real node IDs with real statuses — triggering immediate reconciliati
 7. **`fsitrading-market-monitoring.yaml`** — summarisation pipeline (L1 threshold-classify, L2 phase-detect).
 8. **`FsiTradingEventTypes`** — CloudEvent type constants.
 9. **`FsiTradingSituationDefinitionProvider`** — 4 ganglia + 3 situation definitions.
-10. **Bootstrap bean** — loads YAML, calls `recompiler.register()`, calls `reconciliationLoop.start()`.
+10. **`MarketConditionCloudEventPublisher`** — bridges MarketPulse L3 output to RAS CloudEvents (`io.casehub.fsitrading.market.*`).
+11. **Bootstrap bean** — loads YAML, constructs `situationClearanceWindows` from `FsiTradingSituationDefinitionProvider.registrations()`, calls `recompiler.register(tenancyId, goals, situationClearanceWindows)`, calls `reconciliationLoop.start()`.
 
 ---
 
@@ -803,7 +812,7 @@ No cross-repo changes required — all dependencies already exist.
 
 - Custom health-check framework — ActualStateAdapter + periodic reconciliation handles drift
 - Dynamic GoalCompiler replacing static YAML — base topology is always YAML-declared
-- Cross-domain dependency graphs — each domain adapts independently (#23 tracks this)
+- Cross-domain dependency graphs — each domain adapts independently (#23 tracks this). Note: `DeploymentAdaptiveSituationRecompiler` uses CDI-discovered bean registration. When `CrossDomainCompositionEngine` is active, `DesiredStateReplanDispatch.handleReplan()` uses `DomainRegistration.situationRecompilers()` instead. This is acceptable — cross-domain composition is explicitly out of scope.
 - FaultPolicy-based self-healing — reconciliation loop handles re-provisioning
 - SOC topology (#26) — separate issue, same patterns
 
