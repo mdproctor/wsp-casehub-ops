@@ -37,7 +37,7 @@ Deep research (26 sources, 109 agents, adversarial verification — 10 confirmed
 
 - **`SituationRecompiler` SPI** in `casehub-desiredstate-api` — domain-agnostic contract. The runtime pushes each `ActiveSituation` (from `casehub-ras-api`) to all registered recompilers. Already exists (desiredstate#49, closed).
 - **`DeploymentAdaptiveSituationRecompiler`** in `casehub-ops-deployment` — deployment-domain-specific implementation that applies YAML-defined adaptation rules.
-- **Situation detection** in `casehub-fsitrading` — Ganglion detectors + summarisation pipeline for market conditions. Follows the #84 pattern.
+- **Situation detection** in `casehub-fsitrading` — Ganglion detectors + summarisation pipeline for market conditions. Adapted from the #84 pattern; the `ganglion()` helper adds a parameterised `eventType` parameter (fsitrading uses both `CONDITION` and `SIGNAL` event types, unlike deployment-monitoring which hardcodes `PHASE`).
 - **`ReconciliationLoop` unchanged** — `start()`, `updateDesired()`, `requestReconciliation()` all exist and work as designed.
 
 ---
@@ -161,6 +161,16 @@ The base node (e.g., `risk-agent`) is always present. Derived instances use the 
 
 Instances removed highest-numbered first (LIFO). Graceful shutdown is the `TransitionExecutor`'s responsibility.
 
+### Deactivation Semantics
+
+All adaptation actions are ephemeral — they exist only while their triggering situation is active. The recompiler recompiles from the base graph on every invocation, applying only rules whose situations are currently active. When a situation clears:
+
+- **`scale`** — derived instances (e.g., `risk-agent~2`, `risk-agent~3`) are no longer added to the recompiled graph. The reconciliation loop detects them as extraneous and deprovisions them (LIFO order).
+- **`add`** — added nodes (e.g., `forensics-agent`, `fsitrading/forensics` channel) are not present in the recompiled graph. Reconciliation deprovisions them. Graceful shutdown is the `TransitionExecutor`'s responsibility.
+- **`update`** — the base spec is restored. The next recompilation produces the original field values.
+
+No `remove` action type exists — this is deliberate. The recompile-from-base pattern means node absence is expressed by not adding nodes, not by explicitly removing them. A `remove` action would modify the base topology definition, which is the `GoalCompiler`'s concern, not the `SituationRecompiler`'s.
+
 ### NodeId Collision Validation
 
 At parse time: (1) `target` node ID must not contain `~`, (2) no base topology node may match `{target}~{n}` for any n in [2, max].
@@ -195,7 +205,7 @@ public interface SituationRecompiler {
 }
 ```
 
-The runtime's `SituationRecompilerEngine` pushes each `ActiveSituation` (from `io.casehub.ras.api`) to all registered `SituationRecompiler` instances by priority. The deployment module provides one implementation:
+The runtime's `SituationRecompilerEngine` iterates registered `SituationRecompiler` instances by ascending priority and returns the first non-empty result (chain-of-responsibility, first-match-wins). Priority ordering: domain recompilers at default priority (0), `DeploymentAdaptiveSituationRecompiler` at 100, `CbrSituationRecompiler` at `Integer.MAX_VALUE` (fallback). The deployment recompiler returns `Optional.empty()` for situations it doesn't handle, allowing lower-precedence recompilers to respond. The deployment module provides one implementation:
 
 ```java
 @ApplicationScoped
@@ -208,12 +218,18 @@ public class DeploymentAdaptiveSituationRecompiler implements SituationRecompile
 
     @Override
     public int priority() {
-        return 100; // Domain-specific, higher than CBR's default
+        return 100; // After default domain recompilers (0), before CBR fallback (MAX_VALUE)
     }
 
-    public void register(String tenancyId, DeploymentGoals goals) {
-        List<AdaptationRule> rules = AdaptationRule.fromSpecs(goals.adaptations());
-        tenantStates.put(tenancyId, new TenantAdaptationState(goals, rules));
+    @Inject ObjectMapper mapper;
+    @Inject DesiredStateGraphFactory factory;
+
+    public void register(String tenancyId, DeploymentGoals goals,
+                         Map<String, Duration> situationClearanceWindows) {
+        List<AdaptationRule> rules = AdaptationRule.fromSpecs(
+            goals.adaptations(), compiler, mapper, factory);
+        tenantStates.put(tenancyId,
+            new TenantAdaptationState(goals, rules, situationClearanceWindows));
     }
 
     @Override
@@ -267,11 +283,23 @@ public class DeploymentAdaptiveSituationRecompiler implements SituationRecompile
 
 ### Per-Tenant State
 
-`TenantAdaptationState` holds:
-- The tenant's `DeploymentGoals` (base topology)
-- Parsed `List<AdaptationRule>` (from `goals.adaptations()`)
-- Tracked active situations: `Map<String, ActiveSituation>` keyed by `situationId`
-- Hysteresis state: `activePerRule` and `lastChangePerRule`, keyed by rule name
+`TenantAdaptationState` already exists in `io.casehub.ops.deployment.adaptation` — this spec **modifies** it. Existing fields (`goals`, `rules`, `activePerRule`, `lastChangePerRule`) are retained. Modifications:
+
+| Change | Detail |
+|---|---|
+| **Add field** | `Map<String, ActiveSituation> trackedSituations` — keyed by `situationId` |
+| **Add field** | `Map<String, Duration> situationClearanceWindows` — per-situation TTL for absence detection |
+| **Add method** | `updateSituation(ActiveSituation)` — upserts into `trackedSituations` |
+| **Add method** | `activeSituationFor(AdaptationRule)` — looks up tracked situation matching the rule's trigger `situationId` |
+| **Replace method** | `clearAbsentSituations(Set<String>)` → `clearAbsentSituations()` — the old signature takes externally-polled IDs from `SituationSource`; the new version uses `lastSignal` timestamps and `situationClearanceWindows` to determine absence internally |
+| **Update Javadoc** | References to `AdaptiveTopologyManager` → `DeploymentAdaptiveSituationRecompiler` |
+
+After modification, `TenantAdaptationState` holds:
+- The tenant's `DeploymentGoals` (base topology) — *existing*
+- Parsed `List<AdaptationRule>` (from `goals.adaptations()`) — *existing*
+- Tracked active situations: `Map<String, ActiveSituation>` keyed by `situationId` — *new*
+- Situation clearance windows: `Map<String, Duration>` per-situation TTLs — *new*
+- Hysteresis state: `activePerRule` and `lastChangePerRule`, keyed by rule name — *existing*
 
 ### Situation Tracking
 
@@ -279,9 +307,9 @@ The `SituationRecompiler` is called per-situation. To apply all active situation
 
 1. `updateSituation(situation)` — upserts the situation into the tracked set (keyed by `situationId`)
 2. `activeSituationFor(rule)` — looks up the tracked situation matching `rule.trigger().situation()`
-3. `clearAbsentSituations()` — after processing, mark situations as absent if their `lastSignal` is older than `ReconciliationLoop.DEFAULT_RESYNC` (5 minutes). Absent situations with cooldown are retained until cooldown expires.
+3. `clearAbsentSituations()` — after processing, removes tracked situations where `now - lastSignal > situationClearanceWindows.get(situationId)`. The clearance windows are provided by the bootstrap bean during `register()`, extracted from each `SituationDefinition.correlationWindow()`. This avoids a runtime dependency on `SituationDefinitionRegistry` — the TTLs are static per deployment. Absent situations with cooldown are retained until cooldown expires.
 
-This ensures the recompiler has a complete view of all active situations, not just the one being pushed in this call.
+This ensures the recompiler has a complete view of all active situations, not just the one being pushed in this call. The per-situation TTL threshold (rather than a fixed 5-minute window) prevents premature clearing of long-lived situations — e.g., a `volatility-spike` with 30-minute `correlationWindow` is not cleared after 5 minutes of no new pushes.
 
 ### Hysteresis and Cooldown
 
@@ -301,6 +329,21 @@ When the deployment app bootstraps, it calls `register(tenancyId, goals)` to pro
 | Periodic re-poll safety net | Not needed — runtime handles delivery |
 | `SituationSource` SPI in desiredstate-api | Not needed — `SituationRecompiler` already exists |
 | `SituationChangeEvent` CDI event | Not needed — runtime orchestrates |
+
+### Migration: AdaptiveTopologyManager Removal
+
+`DeploymentAdaptiveSituationRecompiler` fully replaces `AdaptiveTopologyManager`. The following must be deleted:
+
+| File | Reason |
+|---|---|
+| `AdaptiveTopologyManager.java` | Replaced by `DeploymentAdaptiveSituationRecompiler` |
+| `StubSituationSource.java` (`ops/app/spi/`) | No-op SPI stub — `SituationSource` no longer needed |
+
+**`SituationSource` interface removal:** `AdaptiveTopologyManager` injected `SituationSource` to poll active situations. The `SituationRecompiler` SPI receives situations from the runtime — no polling needed. The `SituationSource` interface in `casehub-desiredstate-api` and its `StubSituationSource` `@ApplicationScoped` bean can be removed from the deployment module's dependency graph. (Note: `StubSituationSource` is `@ApplicationScoped`, not `@DefaultBean` — it was the only implementation.)
+
+**`ReconciliationTarget` inner interface:** defined inside `AdaptiveTopologyManager` — deleted with the class. No external references (the reconciliation loop uses `ReconciliationLoop.start()` directly).
+
+**Documentation references:** `AdaptiveTopologyManager` has 25+ references across docs, specs, guides, and plans. These should be updated to reference `DeploymentAdaptiveSituationRecompiler` as part of this issue's documentation pass. The original spec (`2026-06-29-adaptive-ops-design.md`) is already superseded by this spec.
 
 ### Thread Safety
 
@@ -514,6 +557,30 @@ pipeline:
         cloud-event-type: io.casehub.fsitrading.market.condition
 ```
 
+### Market Event Source
+
+The summarisation pipeline consumes CloudEvents matching `io.casehub.fsitrading.market.*`. The fsitrading project has an existing code-based pipeline (`MarketPulseConfiguration`) that processes market data through 5 internal levels (tick → OHLCV bars → trends → regime → narrative) via `EventStreamBus`. This internal pipeline does not emit CloudEvents.
+
+A new `MarketConditionCloudEventPublisher` bridges the internal pipeline to RAS:
+
+```java
+@ApplicationScoped
+public class MarketConditionCloudEventPublisher {
+
+    @Inject CloudEventEmitter emitter;
+
+    public void onRegimeAssessment(RegimeAssessment assessment) {
+        emitter.emit(CloudEventBuilder.v1()
+            .withType("io.casehub.fsitrading.market.condition")
+            .withSource(URI.create("/fsitrading/market-pulse"))
+            .withData(assessment.toCloudEventData())
+            .build());
+    }
+}
+```
+
+This publisher subscribes to the `MarketPulseConfiguration` L3 (RegimeAssessment) output and emits CloudEvents that the RAS summarisation pipeline consumes. The summarisation pipeline then applies its own windowed aggregation and phase detection on top of these events — a second stage of summarisation that produces the ganglion-consumable signals.
+
 ### Event Types
 
 ```java
@@ -536,14 +603,22 @@ public class FsiTradingSituationDefinitionProvider implements SituationDefinitio
     @Override
     public List<GanglionDescriptor> ganglionDescriptors() {
         return List.of(
-            ganglion("volatile-detected", FsiTradingEventTypes.CONDITION,
-                ctx -> "VOLATILE".equals(data(ctx).get("to")), 0.8),
-            ganglion("anomalous-detected", FsiTradingEventTypes.CONDITION,
-                ctx -> "ANOMALOUS".equals(data(ctx).get("to")), 0.95),
-            ganglion("stable-detected", FsiTradingEventTypes.CONDITION,
-                ctx -> "STABLE".equals(data(ctx).get("to")), 0.9),
-            ganglion("breach-signal", FsiTradingEventTypes.SIGNAL,
-                ctx -> "BREACH".equals(data(ctx).get("category")), 0.99)
+            ganglion("volatile-detected", FsiTradingEventTypes.CONDITION, ctx -> {
+                var d = data(ctx);
+                return d != null && "VOLATILE".equals(d.get("to"));
+            }, 0.8),
+            ganglion("anomalous-detected", FsiTradingEventTypes.CONDITION, ctx -> {
+                var d = data(ctx);
+                return d != null && "ANOMALOUS".equals(d.get("to"));
+            }, 0.95),
+            ganglion("stable-detected", FsiTradingEventTypes.CONDITION, ctx -> {
+                var d = data(ctx);
+                return d != null && "STABLE".equals(d.get("to"));
+            }, 0.9),
+            ganglion("breach-signal", FsiTradingEventTypes.SIGNAL, ctx -> {
+                var d = data(ctx);
+                return d != null && "BREACH".equals(d.get("category"));
+            }, 0.99)
         );
     }
 
@@ -558,8 +633,8 @@ public class FsiTradingSituationDefinitionProvider implements SituationDefinitio
                     Duration.ofMinutes(30),
                     null,
                     new ChainMode.Streak("volatile-detected", 2),
-                    new TriggerAction.Noop(),  // situation only — no case creation
-                    new TriggerMode.Continuous()),
+                    new TriggerAction.NotifyOnly(),
+                    new TriggerMode.Repeating(Duration.ofMinutes(5))),
                 null),
 
             // market-anomaly: anomalous state detected
@@ -569,9 +644,9 @@ public class FsiTradingSituationDefinitionProvider implements SituationDefinitio
                     Set.of(FsiTradingEventTypes.CONDITION),
                     Duration.ofMinutes(15),
                     null,
-                    new ChainMode.Single("anomalous-detected"),
-                    new TriggerAction.Noop(),
-                    new TriggerMode.Continuous()),
+                    new ChainMode.Count("anomalous-detected", 1),
+                    new TriggerAction.NotifyOnly(),
+                    new TriggerMode.Repeating(Duration.ofMinutes(2))),
                 null),
 
             // active-breach: immediate, high-confidence
@@ -581,7 +656,7 @@ public class FsiTradingSituationDefinitionProvider implements SituationDefinitio
                     Set.of(FsiTradingEventTypes.SIGNAL),
                     Duration.ofHours(2),
                     null,
-                    new ChainMode.Single("breach-signal"),
+                    new ChainMode.Count("breach-signal", 1),
                     new TriggerAction.CreateCase(
                         new CaseTriggerConfig("fsitrading", "overnight-incident",
                             "1.0", Map.of())),
@@ -589,39 +664,56 @@ public class FsiTradingSituationDefinitionProvider implements SituationDefinitio
                 null)
         );
     }
+
+    @SuppressWarnings("unchecked")
+    private static Map<String, Object> data(Map ctx) {
+        Object d = ctx.get("data");
+        return d instanceof Map ? (Map<String, Object>) d : null;
+    }
+
+    @SuppressWarnings("unchecked")
+    private static GanglionDescriptor ganglion(String id, String eventType,
+                                                java.util.function.Function<Map, Boolean> condition,
+                                                double confidence) {
+        return new GanglionDescriptor.ExpressionRules(
+                id,
+                Set.of(eventType),
+                List.of(new GanglionDescriptor.ExpressionRules.Rule(
+                        new LambdaExpression<>(condition),
+                        DetectionSignal.DETECTED,
+                        confidence,
+                        null,
+                        Map.of())),
+                Map.of());
+    }
 }
 ```
 
+The `ganglion()` helper follows the same pattern as `DeploymentTopologySituationDefinitionProvider.ganglion()` in ops #84, parameterised with `eventType` since fsitrading uses both `CONDITION` and `SIGNAL` event types (unlike deployment-monitoring which hardcodes `PHASE`).
+
 ### Situation Semantics
 
-| Situation | Trigger | TTL | Action | Adaptation |
-|---|---|---|---|---|
-| `fsitrading.volatility-spike` | 2 consecutive VOLATILE phase detections | 30 min | None (situation only) | Scale risk agents 1→5 |
-| `fsitrading.market-anomaly` | Single ANOMALOUS phase detection | 15 min | None (situation only) | Tighten trade-execution trust to 0.9 |
-| `fsitrading.active-breach` | Single breach signal | 2 hours | Create overnight-incident case | Add forensics agent + channel, tighten risk-assessment trust to 0.95 |
+| Situation | Chain | TTL | Action | Mode | Adaptation |
+|---|---|---|---|---|---|
+| `fsitrading.volatility-spike` | `Streak("volatile-detected", 2)` | 30 min | `NotifyOnly` | `Repeating(5m)` | Scale risk agents 1→5 |
+| `fsitrading.market-anomaly` | `Count("anomalous-detected", 1)` | 15 min | `NotifyOnly` | `Repeating(2m)` | Tighten trade-execution trust to 0.9 |
+| `fsitrading.active-breach` | `Count("breach-signal", 1)` | 2 hours | `CreateCase` | `FireOnce` | Add forensics agent + channel, tighten risk-assessment trust to 0.95 |
 
-`TriggerAction.Noop()` for volatility-spike and market-anomaly — these situations exist purely to drive topology adaptation via `SituationRecompiler`. No case is created. `active-breach` creates an overnight-incident case AND drives adaptation.
+`TriggerAction.NotifyOnly()` for volatility-spike and market-anomaly — these situations exist purely to drive topology adaptation via `SituationRecompiler`. No case is created. `TriggerMode.Repeating` keeps the situation's TTL refreshed while the underlying condition persists. `active-breach` creates an overnight-incident case AND drives adaptation, firing once per chain activation.
 
 ---
 
-## Component 5: FaultPolicy — No-Op
+## Component 5: FaultPolicy — Unchanged
 
-*Unchanged from original spec.* Self-healing is built into the reconciliation cycle:
+The existing `DeploymentFaultPolicy` is not modified by this spec. It delegates to `ThresholdFaultPolicy` with tier-3 escalation: after 3 consecutive `PROVISION_FAILED` faults for a node, it adds a `deployment-review` node to the graph for human review. This handles repeated provision failures — a concern orthogonal to topology adaptation.
+
+Self-healing for transient failures is built into the reconciliation cycle:
 
 1. `ActualStateAdapter.readActual()` reports `NodeStatus.ABSENT`
 2. `TransitionPlanner.plan()` generates a PROVISION step
 3. The node is re-provisioned automatically
 
-```java
-@ApplicationScoped
-public class DeploymentFaultPolicy implements FaultPolicy {
-    @Override
-    public List<GraphMutation<DesiredNode>> onFault(FaultEvent event,
-            DesiredStateGraph current) {
-        return List.of();
-    }
-}
-```
+The fault policy handles the case where re-provisioning repeatedly fails — escalation, not adaptation.
 
 ---
 
@@ -657,7 +749,7 @@ These use real node IDs with real statuses — triggering immediate reconciliati
 | T1 | strategy-agent dies | `ActualStateAdapter`: ABSENT. Planner: PROVISION step. Re-provisioned. | Agent reappears. Ledger records fault + recovery. |
 | T2 | Market volatility (price spikes) | Summarisation pipeline: STABLE → VOLATILE. Ganglion: `volatile-detected` × 2 → RAS situation `fsitrading.volatility-spike` (0.85). Recompiler: scale risk-agent to 3. | 3 risk agents. |
 | T3 | Spread widening (anomaly) | Pipeline: VOLATILE → ANOMALOUS. Ganglion → `fsitrading.market-anomaly` (0.7). Recompiler: tighten trust 0.7 → 0.9. | Trust updated. Agents below 0.9 require human oversight. |
-| T4 | Volatility resolves | Pipeline: VOLATILE → STABLE. Situation TTL expires. Recompiler: no scaling adaptation. Risk-agent~3, risk-agent~2 deprovisioned (LIFO). | Back to 1 risk agent. |
+| T4 | Volatility resolves | Pipeline: VOLATILE → STABLE. Ganglion chain no longer sustained — no new `volatile-detected` signals. After TTL expires (30 min), RAS resolves `volatility-spike`. Recompiler clears tracked situation, recompiles from base — no scaling adaptation. risk-agent~3, risk-agent~2 deprovisioned (LIFO). | Back to 1 risk agent. |
 | T5 | Breach detected | Ganglion → `fsitrading.active-breach` (0.99). Case created + recompiler: add forensics-agent + channel, tighten risk-assessment trust to 0.95. | 5 agents, new channel. Overnight-incident case active. |
 
 ### What Makes This Compelling
@@ -674,11 +766,17 @@ These use real node IDs with real statuses — triggering immediate reconciliati
 
 ### casehub-ops (this repo)
 
-1. **`AdaptationRule`** — new types in `io.casehub.ops.api.deployment`: `AdaptationRuleSpec`, `AdaptationRule` with `ScaleAction`, `AddAction`, `UpdateAction`. Includes `fromSpecs()` factory and parse-time validation.
-2. **`DeploymentGoals.adaptations`** — new field (`List<AdaptationRuleSpec>`) on the existing record. Jackson deserializes directly. `@JsonIgnoreProperties(ignoreUnknown = true)` ensures backward compat.
-3. **`AgentNodeSpec.withAgentId(String)`** — copy method for scale-derived instances.
-4. **`DeploymentAdaptiveSituationRecompiler`** — implements `SituationRecompiler`, lives in `casehub-ops-deployment`.
-5. **`TenantAdaptationState`** — per-tenant state: goals, rules, tracked situations, hysteresis.
+**Already exist (this spec depends on them):**
+
+1. **`AdaptationRuleSpec`** — in `io.casehub.ops.api.deployment`. Sealed interface with `ScaleActionSpec`, `AddActionSpec`, `UpdateActionSpec`. Includes parse-time validation.
+2. **`AdaptationRule`** — in `io.casehub.ops.deployment.adaptation`. Runtime wrapper with `fromSpecs(specs, compiler, mapper, factory)` factory and `apply()` method.
+3. **`DeploymentGoals.adaptations`** — `List<AdaptationRuleSpec>` field on the existing record. Jackson deserializes directly.
+4. **`AgentNodeSpec.withAgentId(String)`** — copy method for scale-derived instances.
+
+**New (introduced by this spec):**
+
+5. **`DeploymentAdaptiveSituationRecompiler`** — implements `SituationRecompiler`, lives in `casehub-ops-deployment`.
+6. **`TenantAdaptationState`** — per-tenant state: goals, rules, tracked situations, hysteresis.
 
 ### casehub-fsitrading
 
