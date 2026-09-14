@@ -214,8 +214,26 @@ public interface SituationRecompiler {
         DesiredStateGraphFactory factory
     );
     default int priority() { return 0; }
+
+    /**
+     * Called by the dispatch layer when a situation resolves (ChangeType.RESOLVED).
+     * Allows recompilers to immediately deactivate adaptations rather than
+     * waiting for TTL-based clearance.
+     *
+     * @return non-empty if the graph changed due to deactivation
+     */
+    default Optional<CompilationResult> situationResolved(
+        String tenancyId,
+        String situationId,
+        DesiredStateGraph currentGraph,
+        ActualState actualState,
+        DesiredStateGraphFactory factory) {
+        return Optional.empty();
+    }
 }
 ```
+
+**Note:** `situationResolved()` is a new default method proposed by this spec for `casehub-desiredstate-api` — see §Cross-Repo Dependencies. The default no-op preserves backward compatibility for existing recompilers.
 
 The runtime's `SituationRecompilerEngine` iterates registered `SituationRecompiler` instances by ascending priority and returns the first non-empty result (chain-of-responsibility, first-match-wins). Priority ordering: domain recompilers at default priority (0), `DeploymentAdaptiveSituationRecompiler` at 100, `CbrSituationRecompiler` at `Integer.MAX_VALUE` (fallback). The deployment recompiler returns `Optional.empty()` for situations it doesn't handle, allowing lower-precedence recompilers to respond. The deployment module provides one implementation:
 
@@ -237,14 +255,10 @@ public class DeploymentAdaptiveSituationRecompiler implements SituationRecompile
     @Inject DesiredStateGraphFactory factory;
 
     public void register(String tenancyId, DeploymentGoals goals,
-                         Map<String, Duration> situationClearanceWindows,
-                         List<ActiveSituation> activeSituations) {
+                         Map<String, Duration> situationClearanceWindows) {
         List<AdaptationRule> rules = AdaptationRule.fromSpecs(
             goals.adaptations(), compiler, mapper, factory);
         var state = new TenantAdaptationState(goals, rules, situationClearanceWindows);
-        for (ActiveSituation situation : activeSituations) {
-            state.updateSituation(situation);
-        }
         tenantStates.put(tenancyId, state);
     }
 
@@ -295,6 +309,45 @@ public class DeploymentAdaptiveSituationRecompiler implements SituationRecompile
         }
     }
 
+    @Override
+    public Optional<CompilationResult> situationResolved(
+            String tenancyId,
+            String situationId,
+            DesiredStateGraph currentGraph,
+            ActualState actualState,
+            DesiredStateGraphFactory factory) {
+
+        TenantAdaptationState state = tenantStates.get(tenancyId);
+        if (state == null) {
+            return Optional.empty();
+        }
+
+        synchronized (state) {
+            boolean hadSituation = state.clearSituation(situationId);
+            if (!hadSituation) {
+                return Optional.empty();
+            }
+
+            DesiredStateGraph base = compiler.compile(state.goals(), factory);
+            DesiredStateGraph adapted = base;
+            Set<NodeId> modifiedNodes = new HashSet<>();
+
+            for (AdaptationRule rule : state.rules()) {
+                Optional<ActiveSituation> match = state.activeSituationFor(rule);
+                if (match.isPresent() && state.shouldActivate(rule, match.get())) {
+                    Set<NodeId> targets = rule.targetNodeIds(base);
+                    adapted = rule.apply(adapted, match.get());
+                    modifiedNodes.addAll(targets);
+                }
+            }
+
+            if (graphsEqual(adapted, currentGraph)) {
+                return Optional.empty();
+            }
+            return Optional.of(CompilationResult.single(adapted));
+        }
+    }
+
     private static boolean graphsEqual(DesiredStateGraph a, DesiredStateGraph b) {
         if (a == b) return true;
         if (a == null || b == null) return false;
@@ -315,6 +368,7 @@ public class DeploymentAdaptiveSituationRecompiler implements SituationRecompile
 | **Add field** | `Map<String, Duration> situationClearanceWindows` — per-situation TTL for absence detection |
 | **Add method** | `updateSituation(ActiveSituation)` — upserts into `trackedSituations` |
 | **Add method** | `activeSituationFor(AdaptationRule)` — looks up tracked situation matching the rule's trigger `situationId` |
+| **Add method** | `clearSituation(String situationId)` — removes a specific situation from `trackedSituations` and resets the corresponding rule's activation state. Returns `true` if the situation was tracked. Called by `situationResolved()` for immediate deactivation on RESOLVED events. |
 | **Replace method** | `clearAbsentSituations(Set<String>)` → `clearAbsentSituations()` — the old signature takes externally-polled IDs from `SituationSource`; the new version uses `lastSignal` timestamps and `situationClearanceWindows` to determine absence internally |
 | **Update Javadoc** | References to `AdaptiveTopologyManager` → `DeploymentAdaptiveSituationRecompiler` |
 
@@ -335,20 +389,29 @@ The `SituationRecompiler` is called per-situation. To apply all active situation
 
 This ensures the recompiler has a complete view of all active situations, not just the one being pushed in this call. The per-situation TTL threshold (rather than a fixed 5-minute window) prevents premature clearing of long-lived situations — e.g., a `volatility-spike` with 30-minute `correlationWindow` is not cleared after 5 minutes of no new pushes.
 
+### Deactivation Path
+
+Two-tier deactivation ensures both promptness and reliability:
+
+1. **Primary: `situationResolved()`** — the dispatch layer observes `SituationChangeEvent` with `ChangeType.RESOLVED` and calls `situationResolved()` on the engine. `DeploymentAdaptiveSituationRecompiler.situationResolved()` calls `state.clearSituation(situationId)` and recompiles from base with the remaining active situations. Deactivation is immediate.
+
+2. **Fallback: `clearAbsentSituations()`** — runs on every `recompile()` invocation. If the RESOLVED event was lost (CDI async events can be dropped under load), the TTL-based clearing eventually removes stale situations. This is a safety net, not the primary deactivation path.
+
+For `active-breach` with a 2-hour `correlationWindow`, the primary path deactivates forensics agents and tightened trust policies immediately on breach resolution. The fallback path would take up to 2 hours — acceptable only as a lost-event safety net, not as designed behavior.
+
 ### Hysteresis and Cooldown
 
 Same logic as the original spec — `shouldActivate()` handles hysteresis band and cooldown checks. Lives inside `TenantAdaptationState` instead of `AdaptiveTopologyManager`.
 
 ### Registration
 
-When the deployment app bootstraps, it calls `register(tenancyId, goals, situationClearanceWindows, activeSituations)` to provide the base topology, adaptation rules, per-situation clearance windows, and any already-active situations. The bootstrap bean:
+When the deployment app bootstraps, it calls `register(tenancyId, goals, situationClearanceWindows)` to provide the base topology, adaptation rules, and per-situation clearance windows. The bootstrap bean:
 
 1. Constructs `situationClearanceWindows` from the `SituationDefinitionProvider`'s registrations — mapping each `situationId` to its `SituationDefinition.correlationWindow()`
-2. Queries `SituationSource.activeSituations(tenancyId)` for any situations that are already active (e.g., after a restart during volatile conditions)
-3. Calls `register(tenancyId, goals, situationClearanceWindows, activeSituations)`
-4. Calls `ReconciliationLoop.start()` with the adapted topology
+2. Calls `register(tenancyId, goals, situationClearanceWindows)`
+3. Calls `LifecycleManager.start()` with the base (un-adapted) topology
 
-This ensures the system boots with the correct adapted topology — if the market is volatile at restart time, risk agents are scaled immediately, not after the next situation push.
+**Cold-start recovery** is the dispatch layer's responsibility (see §Component 6). After the reconciliation loop starts, the dispatch layer queries `SituationSource.activeSituations(tenancyId)` for already-active situations and feeds them through `SituationRecompilerEngine.recompile()`. This produces adapted topology within the first reconciliation cycle — if the market is volatile at restart time, risk agents scale before the next debounce window closes (default 1 second).
 
 ### Key Differences from Original Spec
 
@@ -357,9 +420,10 @@ This ensures the system boots with the correct adapted topology — if the marke
 | CDI observer of `SituationChangeEvent` | SPI implementation — runtime pushes situations |
 | Pulls situations from `SituationSource` | Receives `ActiveSituation` directly |
 | Calls `updateDesired()` and `requestReconciliation()` | Returns `CompilationResult` — runtime handles graph update |
-| Periodic re-poll safety net | Not needed — runtime handles delivery |
-| `SituationSource` SPI in desiredstate-api | Not needed — `SituationRecompiler` already exists |
-| `SituationChangeEvent` CDI event | Not needed — runtime orchestrates |
+| Periodic re-poll safety net | TTL-based `clearAbsentSituations()` as safety net (fallback only) |
+| Pulls `SituationSource` for active set | `SituationSource` retained in `casehub-ras-api` — used by dispatch layer for cold start, not by recompiler |
+| `SituationChangeEvent` CDI event observed directly | Dispatch layer in `casehub-desiredstate` bridges events to engine |
+| No resolution signal path (polls active set) | `situationResolved()` for immediate deactivation on RESOLVED events |
 
 ### Migration: AdaptiveTopologyManager Removal
 
@@ -370,7 +434,7 @@ This ensures the system boots with the correct adapted topology — if the marke
 | `AdaptiveTopologyManager.java` | Replaced by `DeploymentAdaptiveSituationRecompiler` |
 | `StubSituationSource.java` (`ops/app/spi/`) | No-op SPI stub — `SituationSource` no longer needed |
 
-**`SituationSource` interface removal:** `AdaptiveTopologyManager` injected `SituationSource` to poll active situations. The `SituationRecompiler` SPI receives situations from the runtime — no polling needed. The `SituationSource` interface in `casehub-desiredstate-api` and its `StubSituationSource` `@ApplicationScoped` bean can be removed from the deployment module's dependency graph. (Note: `StubSituationSource` is `@ApplicationScoped`, not `@DefaultBean` — it was the only implementation.)
+**`SituationSource` interface retained:** The `SituationSource` interface lives in `casehub-ras-api` (package `io.casehub.ras.api`). The `DeploymentAdaptiveSituationRecompiler` does not inject or use `SituationSource` — it receives situations from the dispatch layer via the `SituationRecompiler` SPI. However, `SituationSource` is retained because the dispatch layer in `casehub-desiredstate` uses it for cold-start recovery (querying active situations on startup). `StubSituationSource` in `ops/app/spi/` is deleted — the no-op stub is no longer needed since the recompiler does not inject `SituationSource`. (Note: `StubSituationSource` is `@ApplicationScoped`, not `@DefaultBean` — it was the only implementation in ops.)
 
 **`ReconciliationTarget` inner interface:** defined inside `AdaptiveTopologyManager` — deleted with the class. No external references (the reconciliation loop uses `ReconciliationLoop.start()` directly).
 
@@ -641,6 +705,29 @@ public final class FsiTradingEventTypes {
 
 Security alerts bypass the summarisation pipeline entirely — they go directly to the `breach-signal` ganglion. A breach is a security event, not a market condition.
 
+### Security Event Contract
+
+The fsitrading domain defines a security event record for internal signalling:
+
+```java
+public record FsiTradingSecurityEvent(
+    Severity severity,
+    String source,
+    String detail,
+    Instant timestamp
+) {
+    public enum Severity { INFORMATIONAL, WARNING, CRITICAL }
+}
+```
+
+Sources that fire `FsiTradingSecurityEvent` as a CDI event:
+
+- **Foundation module deregistration** — an agent is forcibly removed outside the reconciliation loop
+- **Trust policy violation** — an agent attempts an action beyond its trust threshold
+- **External SIEM integration** — security monitoring detects anomalous access patterns
+
+This is distinct from Quarkus's `io.quarkus.security.spi.runtime.SecurityEvent` (HTTP security events). The fsitrading domain's security events are domain-specific signals about trading infrastructure integrity.
+
 ### Security Alert Bridge
 
 ```java
@@ -649,8 +736,8 @@ public class SecurityAlertBridge {
 
     @Inject CloudEventEmitter emitter;
 
-    public void onSecurityEvent(SecurityEvent event) {
-        if (event.severity() == Severity.CRITICAL) {
+    public void onSecurityEvent(@ObservesAsync FsiTradingSecurityEvent event) {
+        if (event.severity() == FsiTradingSecurityEvent.Severity.CRITICAL) {
             emitter.emit(CloudEventBuilder.v1()
                 .withType(FsiTradingEventTypes.SECURITY)
                 .withSource(URI.create("/fsitrading/security"))
@@ -665,13 +752,7 @@ public class SecurityAlertBridge {
 }
 ```
 
-The `SecurityAlertBridge` emits `io.casehub.fsitrading.security.alert` CloudEvents when a CRITICAL severity security event occurs. Security events are produced by the fsitrading domain's existing infrastructure:
-
-- **Foundation module deregistration** — an agent is forcibly removed outside the reconciliation loop
-- **Trust policy violation** — an agent attempts an action beyond its trust threshold
-- **External SIEM integration** — security monitoring detects anomalous access patterns
-
-The bridge converts these internal security signals into CloudEvents consumable by the `breach-signal` ganglion. The ganglion requires `category: "BREACH"` — the bridge only emits for CRITICAL severity events, filtering out warnings and informational security events.
+The `SecurityAlertBridge` observes `FsiTradingSecurityEvent` via CDI and emits `io.casehub.fsitrading.security.alert` CloudEvents when a CRITICAL severity event occurs. The bridge converts domain security signals into CloudEvents consumable by the `breach-signal` ganglion. The ganglion requires `category: "BREACH"` — the bridge only emits for CRITICAL severity events, filtering out warnings and informational security events.
 
 ### Situation Definition Provider
 
@@ -814,7 +895,15 @@ The `SituationRecompiler` SPI replaces this with a return-value contract: the re
 
 **Step 5 is critical.** `LifecycleManager.updateDesired()` only swaps the graph reference — it does NOT trigger reconciliation. Without an explicit `requestReconciliation()` call, the new graph takes effect only at the next periodic resync (up to 5 minutes away). For breach response, this latency is unacceptable.
 
-**Dispatch layer ownership:** The dispatch layer that bridges `SituationChangeEvent` to `SituationRecompilerEngine` lives in `casehub-desiredstate` runtime (part of desiredstate#49). The deployment module's `DeploymentAdaptiveSituationRecompiler` is a pure SPI implementation — it does not observe CDI events or call reconciliation methods directly.
+**Dispatch layer ownership:** The dispatch layer that bridges `SituationChangeEvent` to `SituationRecompilerEngine` lives in `casehub-desiredstate` runtime. **This wiring does not yet exist** — desiredstate#49 delivered the SPI (`SituationRecompiler` interface) and engine (`SituationRecompilerEngine` class) but not the dispatch wiring. A new issue on `casehub-desiredstate` is required (see §Cross-Repo Dependencies). The dispatch layer must:
+
+1. Observe `SituationChangeEvent` via CDI (`@ObservesAsync`)
+2. On `ChangeType.TRIGGERED`: extract/construct `ActiveSituation`, call `SituationRecompilerEngine.recompile()`
+3. On `ChangeType.RESOLVED`: call `SituationRecompilerEngine.situationResolved()` — immediate deactivation (see §Deactivation Path)
+4. On non-empty result: call `LifecycleManager.updateDesired(tenancyId, result)`, then `ReconciliationLoop.requestReconciliation(tenancyId)`
+5. On startup: query `SituationSource.activeSituations(tenancyId)` for cold-start recovery and feed existing situations through the engine
+
+The deployment module's `DeploymentAdaptiveSituationRecompiler` is a pure SPI implementation — it does not observe CDI events or call reconciliation methods directly.
 
 ### External Health Checks
 
@@ -833,7 +922,7 @@ These use real node IDs with real statuses — triggering immediate reconciliati
 
 | Time | Event | System Response | Observable |
 |---|---|---|---|
-| T0 | App starts | `register(tenancyId, goals, clearanceWindows, activeSituations)` → base topology (adapted if situations already active): 2 strategy, 1 risk, 1 audit agent, 3 channels, 2 trust policies. All provisioned. | 4 agents in DB |
+| T0 | App starts | `register(tenancyId, goals, clearanceWindows)` → base topology: 2 strategy, 1 risk, 1 audit agent, 3 channels, 2 trust policies. All provisioned. Dispatch layer queries `SituationSource` for cold-start — if situations already active, immediate recompilation adapts topology within the first reconciliation cycle. | 4 agents in DB |
 | T1 | strategy-agent dies | `ActualStateAdapter`: ABSENT. Planner: PROVISION step. Re-provisioned. | Agent reappears. Ledger records fault + recovery. |
 | T2 | Market volatility (price spikes) | Summarisation pipeline: STABLE → VOLATILE. Ganglion: `volatile-detected` → RAS situation `fsitrading.volatility-spike` (0.85). Recompiler: scale risk-agent to 3. | 3 risk agents. |
 | T3 | Spread widening (anomaly) | Pipeline: VOLATILE → ANOMALOUS. Ganglion → `fsitrading.market-anomaly` (0.7). Recompiler: tighten trust 0.7 → 0.9. | Trust updated. Agents below 0.9 require human oversight. |
@@ -882,7 +971,8 @@ These use real node IDs with real statuses — triggering immediate reconciliati
 12. **`FsiTradingSituationDefinitionProvider`** — 4 ganglia + 3 situation definitions.
 13. **`MarketConditionCloudEventPublisher`** — bridges MarketPulse L3 output to RAS CloudEvents (`io.casehub.fsitrading.market.*`).
 14. **`SecurityAlertBridge`** — emits `io.casehub.fsitrading.security.alert` CloudEvents when CRITICAL-severity security events occur. Consumed by the `breach-signal` ganglion.
-15. **Bootstrap bean** — loads YAML, constructs `situationClearanceWindows` from `FsiTradingSituationDefinitionProvider.registrations()`, queries `SituationSource.activeSituations(tenancyId)` for cold-start seeding, calls `recompiler.register(tenancyId, goals, situationClearanceWindows, activeSituations)`, then calls `reconciliationLoop.start()` with the adapted graph.
+15. **`FsiTradingSecurityEvent`** — domain-specific security event record (`Severity`, `source`, `detail`, `timestamp`). Fired as a CDI event by trust violation handlers, foundation module deregistration, and external SIEM integration.
+16. **Bootstrap bean** — loads YAML, constructs `situationClearanceWindows` from `FsiTradingSituationDefinitionProvider.registrations()`, calls `recompiler.register(tenancyId, goals, situationClearanceWindows)`, then calls `LifecycleManager.start()` with the base topology. Cold-start recovery is handled by the dispatch layer in `casehub-desiredstate`.
 
 ---
 
@@ -890,12 +980,19 @@ These use real node IDs with real statuses — triggering immediate reconciliati
 
 | Repo | What's needed | Status |
 |---|---|---|
-| casehub-desiredstate | `SituationRecompiler` SPI, `CompilationResult`, `requestReconciliation()` | **Exists** (desiredstate#49, closed) |
-| casehub-ras | `ActiveSituation` record, `SituationDefinitionProvider`, `GanglionDescriptor`, `SituationRegistration` | **Exists** (ras-api 0.2-SNAPSHOT) |
+| casehub-desiredstate-api | `SituationRecompiler` SPI, `CompilationResult` | **Exists** (desiredstate#49, closed) |
+| casehub-desiredstate-api | `SituationRecompiler.situationResolved()` default method | **New** — cross-repo change required |
+| casehub-desiredstate | `SituationRecompilerEngine`, `ReconciliationLoop.requestReconciliation()`, `LifecycleManager` | **Exists** (desiredstate#49, closed) |
+| casehub-desiredstate | Dispatch layer: `SituationChangeEvent` → `SituationRecompilerEngine` wiring + cold-start recovery | **New** — cross-repo change required |
+| casehub-ras | `ActiveSituation` record, `SituationDefinitionProvider`, `GanglionDescriptor`, `SituationRegistration`, `SituationSource`, `SituationChangeEvent` | **Exists** (ras-api 0.2-SNAPSHOT) |
 | casehub-ops | `AdaptationRule` types, `DeploymentAdaptiveSituationRecompiler`, `DeploymentGoals.adaptations` field | **This issue** |
-| casehub-fsitrading | Deployment YAML, summarisation pipeline, situation detectors | **This issue** |
+| casehub-fsitrading | Deployment YAML, summarisation pipeline, situation detectors, `FsiTradingSecurityEvent` | **This issue** |
 
-No cross-repo changes required — all dependencies already exist.
+**Cross-repo changes required:**
+
+1. **casehub-desiredstate-api:** Add `situationResolved()` default method to `SituationRecompiler` interface. The default returns `Optional.empty()` — no existing recompiler is affected.
+
+2. **casehub-desiredstate runtime:** Build the dispatch layer that bridges `SituationChangeEvent` CDI events to `SituationRecompilerEngine`. Responsibilities: TRIGGERED → `recompile()`, RESOLVED → `situationResolved()`, cold-start via `SituationSource`, result → `LifecycleManager.updateDesired()` + `ReconciliationLoop.requestReconciliation()`. See §Component 6 for the full specification.
 
 ## Non-Goals
 
