@@ -21,9 +21,9 @@ batch2_status:
   - [x] Batch 2: fsitrading-Events
     - [x] Task 4: EventTypes+SecurityEvent+Bridge
     - [x] Task 5: MarketConditionPublisher
-  - [ ] Batch 3: fsitrading-RAS
-    - [ ] Task 6: Summarisation pipeline YAML
-    - [ ] Task 7: SituationDefinitionProvider
+  - [x] Batch 3: fsitrading-RAS
+    - [x] Task 6: Summarisation pipeline YAML
+    - [x] Task 7: SituationDefinitionProvider
   - [ ] Batch 4: fsitrading-Deploy
     - [ ] Task 8: Deployment YAML+Bootstrap
     - [ ] Task 9: E2E integration test
