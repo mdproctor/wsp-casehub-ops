@@ -1,35 +1,34 @@
-# Handoff — casehub-ops
+# Handover — issue-25-fsitrading-adaptive-ops
 
-## Last Session
+**Branch:** `issue-25-fsitrading-adaptive-ops` (ops + fsitrading)
+**Issue:** casehubio/casehub-ops#25
+**Status:** Batch 1 of 4 complete
 
-Fixed issue #71 — `DeploymentGoalLoader` lacked `JavaTimeModule`, causing Duration fields on `DetectionNodeSpec` to fail YAML deserialization. Also fixed `merge()` which silently dropped detections. Landed on main, issue closed.
+## What happened
 
-Reopened epic #74 — was prematurely closed while all child issues still OPEN. Added #72 and #73 to the epic scope. Created slot 170 (desiredstate + ops) with dependency-ordered `.plan` of 10 issues, #75 active.
+Designed and reviewed the full-stack adaptive ops spec, then implemented Batch 1 (ops-side recompiler). Key discovery: desiredstate#49 delivered `SituationRecompiler` (push-based) not `SituationSource` (pull-based) — spec updated accordingly. Design review ran standard depth (4 dimensions, 69 issues, 0 unresolved, $79). Late design addition: YAML-based situation definitions (`YamlSituationDefinitionProvider`) instead of hand-coded Java.
 
-Wrote diary entry: workspace `blog/2026-09-02-mdp01-the-bug-that-hid-a-bug.md`.
+## Decisions
 
-## Cross-Repo Blockers
+- Recompile from base with all tracked situations every time (never patch incrementally)
+- Full Ganglion with summarisation-enhanced RAS detection
+- `YamlSituationDefinitionProvider` generic base in ops-deployment, YAML files in fsitrading
 
-- #75 — NodeSpecFactory SPI must land in casehub-desiredstate before ops Batch 2+
-- #72 — TransitionPlanner orphan fix needs desiredstate (gates #82)
-- #80 — lifecycle+module interaction fix also in casehub-desiredstate
+## Next action
 
-## Immediate Next Step
+Continue with Batch 2 (fsitrading event types + CloudEvent bridge). Run `work continue`.
 
-Open a CLI in `~/claude/casehub/slots/170/desiredstate` and run `work`. Start #75 (NodeSpecFactory SPI). The slot has both desiredstate and ops — all cross-repo issues (#75, #72, #80) can be done in this slot.
+## Cross-repo blockers
 
-## Blog Strategy
-
-Standalone diary entries per issue or batch — not revisions of the #71 entry. Each issue has a distinct technical story. Revise only if continuing the same issue across sessions.
+- desiredstate-api: `situationResolved()` default method — needs cross-repo issue filed
+- desiredstate runtime: dispatch layer (`SituationChangeEvent` → `SituationRecompilerEngine`) — needs cross-repo issue filed
 
 ## References
 
 | Artifact | Path |
 |----------|------|
-| Slot 170 | `~/claude/casehub/slots/170/` (desiredstate + ops) |
-| .plan (slot) | `~/claude/casehub/slots/170/wsp-casehub-ops/.plan` — 10 issues, #75 active |
-| Research (topology) | `docs/research/2026-08-29-canonical-deployment-topologies.md` |
-| Design spec | `docs/specs/2026-08-29-canonical-deployment-topologies-design.md` |
-| Implementation plan | workspace `plans/2026-08-29-canonical-deployment-topologies.md` |
-| ARC42STORIES | `ARC42STORIES.MD` — Journey 3, Chapter 6 |
-| Diary | workspace `blog/2026-09-02-mdp01-the-bug-that-hid-a-bug.md` |
+| Spec | `wsp/specs/issue-25-fsitrading-adaptive-ops/2026-09-14-fsitrading-adaptive-ops-design.md` |
+| Plan | `wsp/plans/2026-09-14-fsitrading-adaptive-ops.md` |
+| Decisions | `wsp/specs/issue-25-fsitrading-adaptive-ops/decisions.md` |
+| Journal | `wsp/JOURNAL.md` |
+| .plan | `wsp/.plan` (Batch 1 checked, 3 remaining) |
