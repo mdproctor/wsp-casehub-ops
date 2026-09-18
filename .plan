@@ -2,7 +2,7 @@
 
 ## State
 branch: issue-25-fsitrading-adaptive-ops
-state: active
+state: closing:promoted
 project-sha: slot-creation
 date: 2026-09-14
 issue-repo: casehubio/casehub-ops
@@ -12,18 +12,6 @@ design-section-hashes:
 flyway-next-v: unknown
 batch2_status: 
 
+evidence-era: true
 ## Queue
-- [ ] casehubio/casehub-ops#25 — Issue #25 ← active
-  - [x] Batch 1: Ops-Recompiler
-    - [x] Task 1: Extend TenantAdaptationState
-    - [x] Task 2: Implement DeploymentAdaptiveSituationRecompiler
-    - [x] Task 3: Remove AdaptiveTopologyManager
-  - [x] Batch 2: fsitrading-Events
-    - [x] Task 4: EventTypes+SecurityEvent+Bridge
-    - [x] Task 5: MarketConditionPublisher
-  - [x] Batch 3: fsitrading-RAS
-    - [x] Task 6: Summarisation pipeline YAML
-    - [x] Task 7: SituationDefinitionProvider
-  - [x] Batch 4: fsitrading-Deploy
-    - [x] Task 8: Deployment YAML+Bootstrap
-    - [x] Task 9: E2E integration test
+- [x] casehubio/casehub-ops#25 — Issue #25
