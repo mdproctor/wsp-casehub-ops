@@ -13,3 +13,6 @@ flyway-next-v: none
 
 ## Queue
 - [ ] casehubio/casehub-ops#99 — Issue #99 ← active
+  - [ ] Batch 1: Streaming+WatchManager
+    - [ ] Task 1: PodmanClient.events()
+    - [ ] Task 2: PodmanWatchManager
