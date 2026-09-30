@@ -79,3 +79,5 @@ handoff_write_attempt=1
 handoff_write=done
 wip_commit=done
 wip_commit_project=done
+wip_commit_workspace=done
+push_and_stack_mechanical_attempt=1
