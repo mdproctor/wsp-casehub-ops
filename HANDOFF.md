@@ -1,34 +1,22 @@
-# Handover — issue-25-fsitrading-adaptive-ops
+# Handoff — casehub-ops
 
-**Branch:** `issue-25-fsitrading-adaptive-ops` (ops + fsitrading)
-**Issue:** casehubio/casehub-ops#25
-**Status:** Batch 1 of 4 complete
+## Last Session
 
-## What happened
+Branch `issue-99-podman-watch-manager`. Completed PodmanClient.events() — NDJSON streaming method via Vert.x JsonParser. PodmanWatchManager deferred: app module has pre-existing compilation errors (ApplicationEntity.findById doesn't exist — plain JPA entity, not Panache). Filed #100 to fix.
 
-Designed and reviewed the full-stack adaptive ops spec, then implemented Batch 1 (ops-side recompiler). Key discovery: desiredstate#49 delivered `SituationRecompiler` (push-based) not `SituationSource` (pull-based) — spec updated accordingly. Design review ran standard depth (4 dimensions, 69 issues, 0 unresolved, $79). Late design addition: YAML-based situation definitions (`YamlSituationDefinitionProvider`) instead of hand-coded Java.
+Also in this session: completed and landed #98 (ContainerEventSource, ContainerFaultPolicy, ContainerReviewSpec) on main via work-end. Decision review caught domain/app boundary violation — revised to passive hot emitter pattern. Filed #99 as follow-up.
 
-## Decisions
+## Immediate Next Step
 
-- Recompile from base with all tracked situations every time (never patch incrementally)
-- Full Ganglion with summarisation-enhanced RAS detection
-- `YamlSituationDefinitionProvider` generic base in ops-deployment, YAML files in fsitrading
-
-## Next action
-
-Continue with Batch 2 (fsitrading event types + CloudEvent bridge). Run `work continue`.
-
-## Cross-repo blockers
-
-- desiredstate-api: `situationResolved()` default method — needs cross-repo issue filed
-- desiredstate runtime: dispatch layer (`SituationChangeEvent` → `SituationRecompilerEngine`) — needs cross-repo issue filed
+Fix #100 (app module compilation), then execute Task 2 from the #99 plan — PodmanWatchManager implementation is fully specified and ready.
 
 ## References
 
 | Artifact | Path |
 |----------|------|
-| Spec | `wsp/specs/issue-25-fsitrading-adaptive-ops/2026-09-14-fsitrading-adaptive-ops-design.md` |
-| Plan | `wsp/plans/2026-09-14-fsitrading-adaptive-ops.md` |
-| Decisions | `wsp/specs/issue-25-fsitrading-adaptive-ops/decisions.md` |
-| Journal | `wsp/JOURNAL.md` |
-| .plan | `wsp/.plan` (Batch 1 checked, 3 remaining) |
+| .plan | workspace `.plan` — #99 active, Task 2 deferred |
+| Plan | workspace `plans/2026-09-29-podman-watch-manager.md` |
+| Spec | workspace `specs/issue-99-podman-watch-manager/` |
+| Journal | workspace `JOURNAL.md` |
+| Decision review (#98) | `reviews/casehub-ops/issue-52-container-decision-20260929-175025/` |
+| #100 blocker | app module compilation fix |
