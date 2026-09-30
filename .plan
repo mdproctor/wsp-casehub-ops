@@ -1,0 +1,15 @@
+# Work Plan — issue-100-app-panache-entity-fix
+
+## State
+branch: issue-100-app-panache-entity-fix
+state: scaffolded
+project-sha: 
+date: 
+issue-repo: casehubio/casehub-ops
+covers: 100
+design-repo: project
+design-section-hashes: 
+flyway-next-v: none
+
+## Queue
+- [ ] casehubio/casehub-ops#100 — Issue #100 ← active
