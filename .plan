@@ -1,0 +1,15 @@
+# Work Plan — issue-101-yaml-apps-design-spec
+
+## State
+branch: issue-101-yaml-apps-design-spec
+state: scaffolded
+project-sha: 
+date: 
+issue-repo: casehubio/casehub-ops
+covers: 101
+design-repo: project
+design-section-hashes: 
+flyway-next-v: none
+
+## Queue
+- [ ] casehubio/casehub-ops#101 — Issue #101 ← active
