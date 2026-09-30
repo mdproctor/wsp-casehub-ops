@@ -14,5 +14,8 @@ flyway-next-v: none
 ## Queue
 - [ ] casehubio/casehub-ops#99 — Issue #99 ← active
   - [ ] Batch 1: Streaming+WatchManager
-    - [ ] Task 1: PodmanClient.events()
+    - [x] Task 1: PodmanClient.events()
     - [ ] Task 2: PodmanWatchManager
+
+## Deferred
+- [ ] PodmanWatchManager in app module (M / Med) [casehubio/casehub-ops] — app module has pre-existing compilation errors (ApplicationEntity.findById does not exist — plain JPA entity, not Panache). Cannot add new classes until fixed. PodmanClient.events() is complete and ready. File issue for app module fix first.
