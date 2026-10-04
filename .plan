@@ -1,0 +1,15 @@
+# Work Plan — issue-116-pool-nodespec-desiredstate
+
+## State
+branch: issue-116-pool-nodespec-desiredstate
+state: scaffolded
+project-sha: 
+date: 
+issue-repo: casehubio/casehub-ops
+covers: 116
+design-repo: 
+design-section-hashes: 
+flyway-next-v: 
+
+## Queue
+- [ ] casehubio/casehub-ops#116 — Issue #116 ← active
