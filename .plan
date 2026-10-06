@@ -1,0 +1,15 @@
+# Work Plan — issue-93-adaptation-conflict-metrics
+
+## State
+branch: issue-93-adaptation-conflict-metrics
+state: scaffolded
+project-sha: 
+date: 
+issue-repo: casehubio/casehub-ops
+covers: 93
+design-repo: 
+design-section-hashes: 
+flyway-next-v: 
+
+## Queue
+- [ ] casehubio/casehub-ops#93 — Issue #93 ← active
