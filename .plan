@@ -1,0 +1,15 @@
+# Work Plan — issue-119-enable-graphql-generation
+
+## State
+branch: issue-119-enable-graphql-generation
+state: scaffolded
+project-sha: 
+date: 
+issue-repo: casehubio/casehub-ops
+covers: 119
+design-repo: 
+design-section-hashes: 
+flyway-next-v: 
+
+## Queue
+- [ ] casehubio/casehub-ops#119 — Issue #119 ← active
