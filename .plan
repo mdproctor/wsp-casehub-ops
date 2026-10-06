@@ -2,7 +2,7 @@
 
 ## State
 branch: issue-118-extract-ops-service-module
-state: closing:verified
+state: closing:promoted
 project-sha: 
 date: 
 issue-repo: casehubio/casehub-ops
