@@ -39,8 +39,8 @@ those tests compile. Task 3 adds the method.
 ### Task 1: ComplianceRemediationCaseDescriptor — assess worker + case definition
 
 **Files:**
-- Create: `app/src/main/java/io/casehub/ops/app/case_/ComplianceRemediationCaseDescriptor.java`
-- Test: `app/src/test/java/io/casehub/ops/app/case_/ComplianceRemediationCaseDescriptorTest.java`
+- Create: `service`
+- Test: `service`
 
 **Interfaces:**
 - Consumes: `CaseDefinition.builder()`, `Capability.of()`, `Worker.builder()`, `Binding.builder()`, `WorkerFunction.Sync`, `WorkerResult`, `ContextChangeTrigger` (all from casehub-engine API)
@@ -49,7 +49,7 @@ those tests compile. Task 3 adds the method.
 - [ ] **Step 1: Write failing tests for case definition identity and assess worker**
 
 ```java
-package io.casehub.ops.app.case_;
+package io.casehub.ops.service.case_;
 
 import io.casehub.api.model.CaseDefinition;
 import io.casehub.api.model.ContextChangeTrigger;
@@ -81,8 +81,8 @@ class ComplianceRemediationCaseDescriptorTest {
         CaseDefinition def = ComplianceRemediationCaseDescriptor.build(null, null);
         assertThat(def.getCapabilities()).hasSize(4);
         assertThat(def.getCapabilities()).extracting("name")
-                .containsExactlyInAnyOrder("assess-compliance", "remediate-compliance",
-                        "verify-compliance", "escalate-compliance");
+                                         .containsExactlyInAnyOrder("assess-compliance", "remediate-compliance",
+                                                                    "verify-compliance", "escalate-compliance");
     }
 
     @Test
@@ -96,8 +96,8 @@ class ComplianceRemediationCaseDescriptorTest {
         CaseDefinition def = ComplianceRemediationCaseDescriptor.build(null, null);
         assertThat(def.getBindings()).hasSize(3);
         assertThat(def.getBindings()).extracting("name")
-                .containsExactlyInAnyOrder("on-compliance-assessment",
-                        "on-compliance-remediation-executed", "on-compliance-escalation-required");
+                                     .containsExactlyInAnyOrder("on-compliance-assessment",
+                                                                "on-compliance-remediation-executed", "on-compliance-escalation-required");
     }
 
     @Test
@@ -110,8 +110,8 @@ class ComplianceRemediationCaseDescriptorTest {
     void assessmentBindingTriggersOnComplianceAssessment() {
         CaseDefinition def = ComplianceRemediationCaseDescriptor.build(null, null);
         var binding = def.getBindings().stream()
-                .filter(b -> b.getName().equals("on-compliance-assessment"))
-                .findFirst().orElseThrow();
+                         .filter(b -> b.getName().equals("on-compliance-assessment"))
+                         .findFirst().orElseThrow();
         assertThat(binding.getOn()).isInstanceOf(ContextChangeTrigger.class);
     }
 
@@ -119,9 +119,9 @@ class ComplianceRemediationCaseDescriptorTest {
 
     @Test
     void assessFailLogRetentionWithServiceIdReturnsUpdateConfig() {
-        var input = violationInput("log-retention-policy", "LOG_RETENTION", "FAIL", "order-api");
-        WorkerResult<?> result = ComplianceRemediationCaseDescriptor.assessCompliance(input);
-        var assessment = extractAssessment(result);
+        var             input      = violationInput("log-retention-policy", "LOG_RETENTION", "FAIL", "order-api");
+        WorkerResult<?> result     = ComplianceRemediationCaseDescriptor.assessCompliance(input);
+        var             assessment = extractAssessment(result);
         assertThat(assessment.get("action")).isEqualTo("update-config");
         assertThat(assessment.get("controlType")).isEqualTo("LOG_RETENTION");
         @SuppressWarnings("unchecked")
@@ -132,9 +132,9 @@ class ComplianceRemediationCaseDescriptorTest {
 
     @Test
     void assessFailEncryptionWithServiceIdReturnsUpdateConfig() {
-        var input = violationInput("encryption-at-rest", "ENCRYPTION_AT_REST", "FAIL", "order-api");
-        WorkerResult<?> result = ComplianceRemediationCaseDescriptor.assessCompliance(input);
-        var assessment = extractAssessment(result);
+        var             input      = violationInput("encryption-at-rest", "ENCRYPTION_AT_REST", "FAIL", "order-api");
+        WorkerResult<?> result     = ComplianceRemediationCaseDescriptor.assessCompliance(input);
+        var             assessment = extractAssessment(result);
         assertThat(assessment.get("action")).isEqualTo("update-config");
         @SuppressWarnings("unchecked")
         Map<String, String> configUpdates = (Map<String, String>) assessment.get("configUpdates");
@@ -147,8 +147,8 @@ class ComplianceRemediationCaseDescriptorTest {
     @Test
     @SuppressWarnings("unchecked")
     void assessFailAutoFixableNoServiceIdEscalates() {
-        var input = violationInput("log-retention-policy", "LOG_RETENTION", "FAIL", null);
-        WorkerResult<?> result = ComplianceRemediationCaseDescriptor.assessCompliance(input);
+        var                 input  = violationInput("log-retention-policy", "LOG_RETENTION", "FAIL", null);
+        WorkerResult<?>     result = ComplianceRemediationCaseDescriptor.assessCompliance(input);
         Map<String, Object> output = (Map<String, Object>) result.output();
         assertThat(output).containsKey("complianceEscalationRequired");
     }
@@ -156,8 +156,8 @@ class ComplianceRemediationCaseDescriptorTest {
     @Test
     @SuppressWarnings("unchecked")
     void assessFailNonAutoFixableEscalates() {
-        var input = violationInput("access-review-quarterly", "ACCESS_REVIEW", "FAIL", "order-api");
-        WorkerResult<?> result = ComplianceRemediationCaseDescriptor.assessCompliance(input);
+        var                 input  = violationInput("access-review-quarterly", "ACCESS_REVIEW", "FAIL", "order-api");
+        WorkerResult<?>     result = ComplianceRemediationCaseDescriptor.assessCompliance(input);
         Map<String, Object> output = (Map<String, Object>) result.output();
         assertThat(output).containsKey("complianceEscalationRequired");
     }
@@ -165,8 +165,8 @@ class ComplianceRemediationCaseDescriptorTest {
     @Test
     @SuppressWarnings("unchecked")
     void assessUnavailableOutcomeEscalates() {
-        var input = violationInput("encryption-at-rest", "ENCRYPTION_AT_REST", "UNAVAILABLE", "order-api");
-        WorkerResult<?> result = ComplianceRemediationCaseDescriptor.assessCompliance(input);
+        var                 input  = violationInput("encryption-at-rest", "ENCRYPTION_AT_REST", "UNAVAILABLE", "order-api");
+        WorkerResult<?>     result = ComplianceRemediationCaseDescriptor.assessCompliance(input);
         Map<String, Object> output = (Map<String, Object>) result.output();
         assertThat(output).containsKey("complianceEscalationRequired");
     }
@@ -174,8 +174,8 @@ class ComplianceRemediationCaseDescriptorTest {
     @Test
     @SuppressWarnings("unchecked")
     void assessStaleOutcomeEscalates() {
-        var input = violationInput("encryption-at-rest", "ENCRYPTION_AT_REST", "STALE", "order-api");
-        WorkerResult<?> result = ComplianceRemediationCaseDescriptor.assessCompliance(input);
+        var                 input  = violationInput("encryption-at-rest", "ENCRYPTION_AT_REST", "STALE", "order-api");
+        WorkerResult<?>     result = ComplianceRemediationCaseDescriptor.assessCompliance(input);
         Map<String, Object> output = (Map<String, Object>) result.output();
         assertThat(output).containsKey("complianceEscalationRequired");
     }
@@ -216,7 +216,7 @@ class ComplianceRemediationCaseDescriptorTest {
     }
 
     private Map<String, Object> violationInput(String controlId, String controlType,
-                                                String outcome, String serviceId) {
+                                               String outcome, String serviceId) {
         var input = new LinkedHashMap<String, Object>();
         input.put("controlId", controlId);
         input.put("controlType", controlType);
@@ -239,13 +239,13 @@ Expected: compilation failure — `ComplianceRemediationCaseDescriptor` does not
 - [ ] **Step 3: Implement ComplianceRemediationCaseDescriptor with assess worker**
 
 ```java
-package io.casehub.ops.app.case_;
+package io.casehub.ops.service.case_;
 
 import io.casehub.api.model.Binding;
 import io.casehub.api.model.CaseDefinition;
 import io.casehub.api.model.ContextChangeTrigger;
-import io.casehub.ops.app.service.ApplicationLifecycleService;
-import io.casehub.ops.app.service.NodeConvergenceTracker;
+import io.casehub.ops.service.service.ApplicationLifecycleService;
+import io.casehub.ops.service.service.NodeConvergenceTracker;
 import io.casehub.worker.api.Capability;
 import io.casehub.worker.api.Worker;
 import io.casehub.worker.api.WorkerFunction;
@@ -268,18 +268,18 @@ public final class ComplianceRemediationCaseDescriptor {
     private ComplianceRemediationCaseDescriptor() {}
 
     public static CaseDefinition build(ApplicationLifecycleService lifecycleService,
-                                        NodeConvergenceTracker convergenceTracker) {
+                                       NodeConvergenceTracker convergenceTracker) {
         return CaseDefinition.builder()
-                .namespace("ops")
-                .name("compliance-remediation")
-                .version("1.0")
-                .title("Compliance Remediation")
-                .summary("Assesses compliance violations and applies config fixes or escalates")
-                .capabilities(capabilities())
-                .workers(workers(lifecycleService, convergenceTracker))
-                .bindings(bindings())
-                .completion(".complianceStatus == \"resolved\" || .complianceStatus == \"escalated\"")
-                .build();
+                             .namespace("ops")
+                             .name("compliance-remediation")
+                             .version("1.0")
+                             .title("Compliance Remediation")
+                             .summary("Assesses compliance violations and applies config fixes or escalates")
+                             .capabilities(capabilities())
+                             .workers(workers(lifecycleService, convergenceTracker))
+                             .bindings(bindings())
+                             .completion(".complianceStatus == \"resolved\" || .complianceStatus == \"escalated\"")
+                             .build();
     }
 
     private static List<Capability> capabilities() {
@@ -292,60 +292,60 @@ public final class ComplianceRemediationCaseDescriptor {
 
     @SuppressWarnings("unchecked")
     private static List<Worker> workers(ApplicationLifecycleService lifecycleService,
-                                         NodeConvergenceTracker convergenceTracker) {
+                                        NodeConvergenceTracker convergenceTracker) {
         return List.of(
                 Worker.builder()
-                        .name("compliance-assess-worker")
-                        .capabilityName("assess-compliance")
-                        .function(new WorkerFunction.Sync<>(Map.class, Map.class,
-                                (input, scope) -> assessCompliance(input)))
-                        .build(),
+                      .name("compliance-assess-worker")
+                      .capabilityName("assess-compliance")
+                      .function(new WorkerFunction.Sync<>(Map.class, Map.class,
+                                                          (input, scope) -> assessCompliance(input)))
+                      .build(),
                 Worker.builder()
-                        .name("compliance-remediate-worker")
-                        .capabilityName("remediate-compliance")
-                        .function(new WorkerFunction.Sync<>(Map.class, Map.class,
-                                (input, scope) -> remediateCompliance(input, lifecycleService)))
-                        .build(),
+                      .name("compliance-remediate-worker")
+                      .capabilityName("remediate-compliance")
+                      .function(new WorkerFunction.Sync<>(Map.class, Map.class,
+                                                          (input, scope) -> remediateCompliance(input, lifecycleService)))
+                      .build(),
                 Worker.builder()
-                        .name("compliance-verify-worker")
-                        .capabilityName("verify-compliance")
-                        .function(new WorkerFunction.Sync<>(Map.class, Map.class,
-                                (input, scope) -> verifyCompliance(input, scope, convergenceTracker)))
-                        .build(),
+                      .name("compliance-verify-worker")
+                      .capabilityName("verify-compliance")
+                      .function(new WorkerFunction.Sync<>(Map.class, Map.class,
+                                                          (input, scope) -> verifyCompliance(input, scope, convergenceTracker)))
+                      .build(),
                 Worker.builder()
-                        .name("compliance-escalate-worker")
-                        .capabilityName("escalate-compliance")
-                        .function(new WorkerFunction.Sync<>(Map.class, Map.class,
-                                (input, scope) -> escalateCompliance(input)))
-                        .build());
+                      .name("compliance-escalate-worker")
+                      .capabilityName("escalate-compliance")
+                      .function(new WorkerFunction.Sync<>(Map.class, Map.class,
+                                                          (input, scope) -> escalateCompliance(input)))
+                      .build());
     }
 
     private static List<Binding> bindings() {
         return List.of(
                 Binding.builder()
-                        .name("on-compliance-assessment")
-                        .on(new ContextChangeTrigger(".complianceAssessment"))
-                        .capability(Capability.of("remediate-compliance", "any", "any"))
-                        .build(),
+                       .name("on-compliance-assessment")
+                       .on(new ContextChangeTrigger(".complianceAssessment"))
+                       .capability(Capability.of("remediate-compliance", "any", "any"))
+                       .build(),
                 Binding.builder()
-                        .name("on-compliance-remediation-executed")
-                        .on(new ContextChangeTrigger(".complianceRemediationExecuted"))
-                        .capability(Capability.of("verify-compliance", "any", "any"))
-                        .build(),
+                       .name("on-compliance-remediation-executed")
+                       .on(new ContextChangeTrigger(".complianceRemediationExecuted"))
+                       .capability(Capability.of("verify-compliance", "any", "any"))
+                       .build(),
                 Binding.builder()
-                        .name("on-compliance-escalation-required")
-                        .on(new ContextChangeTrigger(".complianceEscalationRequired"))
-                        .capability(Capability.of("escalate-compliance", "any", "any"))
-                        .build());
+                       .name("on-compliance-escalation-required")
+                       .on(new ContextChangeTrigger(".complianceEscalationRequired"))
+                       .capability(Capability.of("escalate-compliance", "any", "any"))
+                       .build());
     }
 
     static WorkerResult assessCompliance(Map<String, Object> input) {
         if (input == null) return WorkerResult.failed("Violation data is null");
 
-        String controlId = (String) input.get("controlId");
+        String controlId   = (String) input.get("controlId");
         String controlType = (String) input.get("controlType");
-        String outcome = (String) input.get("outcome");
-        String tenancyId = (String) input.get("tenancyId");
+        String outcome     = (String) input.get("outcome");
+        String tenancyId   = (String) input.get("tenancyId");
 
         if (controlId == null || controlId.isBlank())
             return WorkerResult.failed("controlId is required");
@@ -356,15 +356,15 @@ public final class ComplianceRemediationCaseDescriptor {
         if (tenancyId == null || tenancyId.isBlank())
             return WorkerResult.failed("tenancyId is required");
 
-        String serviceId = (String) input.get("serviceId");
+        String serviceId     = (String) input.get("serviceId");
         String applicationId = (String) input.get("applicationId");
-        String detail = (String) input.get("detail");
+        String detail        = (String) input.get("detail");
         @SuppressWarnings("unchecked")
         List<String> frameworks = (List<String>) input.get("frameworks");
 
         boolean isAutoFixable = AUTO_FIX_CONFIGS.containsKey(controlType);
-        boolean hasServiceId = serviceId != null && !serviceId.isBlank();
-        boolean isFail = "FAIL".equals(outcome);
+        boolean hasServiceId  = serviceId != null && !serviceId.isBlank();
+        boolean isFail        = "FAIL".equals(outcome);
 
         String action = (isFail && isAutoFixable && hasServiceId) ? "update-config" : "escalate";
 
@@ -393,12 +393,12 @@ public final class ComplianceRemediationCaseDescriptor {
 
     @SuppressWarnings("unchecked")
     static WorkerResult remediateCompliance(Map<String, Object> input,
-                                             ApplicationLifecycleService lifecycleService) {
-        Map<String, Object> assessment = (Map<String, Object>) input.get("complianceAssessment");
-        String applicationId = (String) assessment.get("applicationId");
-        String serviceId = (String) assessment.get("serviceId");
-        String tenancyId = (String) assessment.get("tenancyId");
-        String controlId = (String) assessment.get("controlId");
+                                            ApplicationLifecycleService lifecycleService) {
+        Map<String, Object> assessment    = (Map<String, Object>) input.get("complianceAssessment");
+        String              applicationId = (String) assessment.get("applicationId");
+        String              serviceId     = (String) assessment.get("serviceId");
+        String              tenancyId     = (String) assessment.get("tenancyId");
+        String              controlId     = (String) assessment.get("controlId");
         Map<String, String> configUpdates = (Map<String, String>) assessment.get("configUpdates");
 
         Set<String> affectedNodeIds;
@@ -411,7 +411,7 @@ public final class ComplianceRemediationCaseDescriptor {
             escalation.put("controlId", controlId);
             escalation.put("serviceId", serviceId);
             return WorkerResult.of(Map.of("complianceEscalationRequired", true,
-                                           "complianceRemediationError", escalation));
+                                          "complianceRemediationError", escalation));
         }
 
         var executed = new LinkedHashMap<String, Object>();
@@ -426,11 +426,11 @@ public final class ComplianceRemediationCaseDescriptor {
 
     @SuppressWarnings("unchecked")
     static WorkerResult verifyCompliance(Map<String, Object> input,
-                                          WorkerScope scope,
-                                          NodeConvergenceTracker convergenceTracker) {
-        Map<String, Object> executed = (Map<String, Object>) input.get("complianceRemediationExecuted");
-        List<String> affectedNodeIdsList = (List<String>) executed.get("affectedNodeIds");
-        Set<String> affectedNodeIds = new HashSet<>(affectedNodeIdsList);
+                                         WorkerScope scope,
+                                         NodeConvergenceTracker convergenceTracker) {
+        Map<String, Object> executed            = (Map<String, Object>) input.get("complianceRemediationExecuted");
+        List<String>        affectedNodeIdsList = (List<String>) executed.get("affectedNodeIds");
+        Set<String>         affectedNodeIds     = new HashSet<>(affectedNodeIdsList);
 
         UUID caseId = scope.caseId();
         convergenceTracker.register(caseId, affectedNodeIds, "complianceStatus", "resolved");
@@ -442,18 +442,18 @@ public final class ComplianceRemediationCaseDescriptor {
     static WorkerResult escalateCompliance(Map<String, Object> input) {
         Map<String, Object> assessment = (Map<String, Object>) input.getOrDefault(
                 "complianceAssessment", Map.of());
-        String controlId = (String) assessment.getOrDefault("controlId", "unknown");
+        String controlId   = (String) assessment.getOrDefault("controlId", "unknown");
         String controlType = (String) assessment.getOrDefault("controlType", "unknown");
-        String outcome = (String) assessment.getOrDefault("outcome", "unknown");
-        String serviceId = (String) assessment.getOrDefault("serviceId", "unknown");
-        String detail = (String) assessment.getOrDefault("detail", "");
+        String outcome     = (String) assessment.getOrDefault("outcome", "unknown");
+        String serviceId   = (String) assessment.getOrDefault("serviceId", "unknown");
+        String detail      = (String) assessment.getOrDefault("detail", "");
         @SuppressWarnings("unchecked")
         List<String> frameworks = (List<String>) assessment.getOrDefault("frameworks", List.of());
 
         Map<String, Object> remediationError = (Map<String, Object>) input.get("complianceRemediationError");
         String escalationDetail = remediationError != null
-                ? (String) remediationError.get("reason")
-                : "Compliance violation requires human review: " + controlType + " " + outcome;
+                                  ? (String) remediationError.get("reason")
+                                  : "Compliance violation requires human review: " + controlType + " " + outcome;
 
         var escalation = new LinkedHashMap<String, Object>();
         escalation.put("summary", "Compliance violation on " + controlId + " requires human review");
@@ -501,9 +501,9 @@ Refs casehubio/casehub-ops#37"
 ### Task 2: Remediate, verify, and escalate worker tests + registrar wiring
 
 **Files:**
-- Modify: `app/src/test/java/io/casehub/ops/app/case_/ComplianceRemediationCaseDescriptorTest.java`
-- Modify: `app/src/main/java/io/casehub/ops/app/case_/CaseDefinitionRegistrar.java`
-- Modify: `app/src/test/java/io/casehub/ops/app/case_/CaseDefinitionRegistrarTest.java`
+- Modify: `service`
+- Modify: `service`
+- Modify: `service`
 
 **Interfaces:**
 - Consumes: `ComplianceRemediationCaseDescriptor.build(ApplicationLifecycleService, NodeConvergenceTracker)`, `ApplicationLifecycleService.updateServiceConfig()` (from Task 3), `NodeConvergenceTracker.register()`, `TestWorkerScope` (from IncidentResponseCaseDescriptorTest — same package)
@@ -679,26 +679,28 @@ assertThat(stubNames).containsExactlyInAnyOrder(
 ```
 
 Add a new test:
+
 ```java
-    @Test
-    void registersComplianceRemediationWithRealCapabilities() {
-        var registry = new RecordingRegistry();
-        var registrar = new CaseDefinitionRegistrar(registry,
-                new io.casehub.ops.app.service.NodeConvergenceTracker(
-                        (caseId, path, value) -> {},
-                        new com.fasterxml.jackson.databind.ObjectMapper()
-                                .registerModule(new com.fasterxml.jackson.datatype.jsr310.JavaTimeModule())),
-                null);
 
-        registrar.onStartup(null);
+@Test
+void registersComplianceRemediationWithRealCapabilities() {
+    var registry = new RecordingRegistry();
+    var registrar = new CaseDefinitionRegistrar(registry,
+                                                new io.casehub.ops.service.service.NodeConvergenceTracker(
+                                                        (caseId, path, value) -> {},
+                                                        new com.fasterxml.jackson.databind.ObjectMapper()
+                                                                .registerModule(new com.fasterxml.jackson.datatype.jsr310.JavaTimeModule())),
+                                                null);
 
-        var complianceDef = registry.registered.stream()
-                .filter(d -> "compliance-remediation".equals(d.getName()))
-                .findFirst().orElseThrow();
-        assertThat(complianceDef.getTitle()).doesNotContain("stub");
-        assertThat(complianceDef.getCapabilities()).extracting("name")
-                .contains("assess-compliance", "remediate-compliance");
-    }
+    registrar.onStartup(null);
+
+    var complianceDef = registry.registered.stream()
+                                           .filter(d -> "compliance-remediation".equals(d.getName()))
+                                           .findFirst().orElseThrow();
+    assertThat(complianceDef.getTitle()).doesNotContain("stub");
+    assertThat(complianceDef.getCapabilities()).extracting("name")
+                                               .contains("assess-compliance", "remediate-compliance");
+}
 ```
 
 - [ ] **Step 5: Run registrar tests**
@@ -723,8 +725,8 @@ Refs casehubio/casehub-ops#37"
 ### Task 3: ApplicationLifecycleService.updateServiceConfig()
 
 **Files:**
-- Modify: `app/src/main/java/io/casehub/ops/app/service/ApplicationLifecycleService.java`
-- Modify: `app/src/test/java/io/casehub/ops/app/service/ApplicationLifecycleServiceTest.java`
+- Modify: `service`
+- Modify: `service`
 
 **Interfaces:**
 - Consumes: `ApplicationEntity`, `ServiceDefinition`, `ObjectMapper`, `ApplicationGoalCompiler`, `ReconciliationLoop`, `ClusterService`

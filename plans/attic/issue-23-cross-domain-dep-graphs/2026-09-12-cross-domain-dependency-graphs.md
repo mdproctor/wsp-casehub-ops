@@ -919,7 +919,7 @@ git commit -m "feat: add ComplianceDomainRegistration + IoTDomainRegistration Re
 **Repo:** casehub-ops
 **Files:**
 - Create: `app/src/main/resources/casehub-orchestration.yaml`
-- Create: `app/src/test/java/io/casehub/ops/app/CrossDomainOrchestrationTest.java`
+- Create: `service`
 - Modify: `ARC42STORIES.MD` — §2 Constraints, §10 Architectural Decisions
 
 **Interfaces:**
@@ -955,12 +955,14 @@ domains:
 - [ ] **Step 2: Write the integration test**
 
 ```java
-package io.casehub.ops.app;
+package io.casehub.ops.service;
 
 import io.casehub.desiredstate.api.*;
 import io.casehub.desiredstate.runtime.*;
 import org.junit.jupiter.api.Test;
+
 import java.util.*;
+
 import static org.junit.jupiter.api.Assertions.*;
 
 class CrossDomainOrchestrationTest {
@@ -971,35 +973,35 @@ class CrossDomainOrchestrationTest {
     void four_domain_merge_respects_ordering() {
         // Stub registrations with minimal nodes matching orchestration YAML
         DomainRegistration infra = stubReg("infra",
-            List.of(node("k8s-namespace-prod", "infra")),
-            Map.of("namespace-ready", NodeId.of("k8s-namespace-prod")));
+                                           List.of(node("k8s-namespace-prod", "infra")),
+                                           Map.of("namespace-ready", NodeId.of("k8s-namespace-prod")));
 
         DomainRegistration deploy = stubReg("deployment",
-            List.of(node("agent-alpha", "deploy")),
-            Map.of("topology-ready", NodeId.of("agent-alpha")));
+                                            List.of(node("agent-alpha", "deploy")),
+                                            Map.of("topology-ready", NodeId.of("agent-alpha")));
 
         DomainRegistration compliance = stubReg("compliance",
-            List.of(node("soc2-encryption", "compliance")),
-            Map.of());
+                                                List.of(node("soc2-encryption", "compliance")),
+                                                Map.of());
 
         DomainRegistration iot = stubReg("iot",
-            List.of(node("gateway-config", "iot")),
-            Map.of());
+                                         List.of(node("gateway-config", "iot")),
+                                         Map.of());
 
         var config = new OrchestrationConfig(List.of(
-            new OrchestrationConfig.DomainEntry("infra", "casehub-infra.yaml", List.of(), List.of()),
-            new OrchestrationConfig.DomainEntry("deployment", "casehub-deployment.yaml",
-                List.of("infra"), List.of()),
-            new OrchestrationConfig.DomainEntry("compliance", "casehub-compliance.yaml",
-                List.of("deployment"),
-                List.of(new OrchestrationConfig.EdgeEntry("soc2-encryption", "infra", "namespace-ready"))),
-            new OrchestrationConfig.DomainEntry("iot", "casehub-iot.yaml",
-                List.of(),
-                List.of(new OrchestrationConfig.EdgeEntry("gateway-config", "infra", "namespace-ready")))
-        ));
+                new OrchestrationConfig.DomainEntry("infra", "casehub-infra.yaml", List.of(), List.of()),
+                new OrchestrationConfig.DomainEntry("deployment", "casehub-deployment.yaml",
+                                                    List.of("infra"), List.of()),
+                new OrchestrationConfig.DomainEntry("compliance", "casehub-compliance.yaml",
+                                                    List.of("deployment"),
+                                                    List.of(new OrchestrationConfig.EdgeEntry("soc2-encryption", "infra", "namespace-ready"))),
+                new OrchestrationConfig.DomainEntry("iot", "casehub-iot.yaml",
+                                                    List.of(),
+                                                    List.of(new OrchestrationConfig.EdgeEntry("gateway-config", "infra", "namespace-ready")))
+                                                    ));
 
         var orchestrator = new DomainOrchestrator(Map.of(
-            "infra", infra, "deployment", deploy, "compliance", compliance, "iot", iot));
+                "infra", infra, "deployment", deploy, "compliance", compliance, "iot", iot));
         DesiredStateGraph merged = orchestrator.orchestrate(config, factory);
 
         // All 4 nodes present
@@ -1024,18 +1026,24 @@ class CrossDomainOrchestrationTest {
 
     private DesiredNode node(String id, String type) {
         return new DesiredNode(NodeId.of(id), new NodeSpec() {
-            @Override public NodeType type() { return NodeType.of(type); }
+            @Override
+            public NodeType type() {return NodeType.of(type);}
         }, HumanGating.NONE);
     }
 
     private DomainRegistration stubReg(String domainId, List<DesiredNode> nodes,
-                                        Map<String, NodeId> exports) {
+                                       Map<String, NodeId> exports) {
         return new DomainRegistration() {
-            @Override public String domainId() { return domainId; }
-            @Override public CompilationResult compile(String p, DesiredStateGraphFactory f) {
+            @Override
+            public String domainId() {return domainId;}
+
+            @Override
+            public CompilationResult compile(String p, DesiredStateGraphFactory f) {
                 return CompilationResult.single(f.of(nodes, List.of()));
             }
-            @Override public Map<String, NodeId> exportedNodes() { return exports; }
+
+            @Override
+            public Map<String, NodeId> exportedNodes() {return exports;}
         };
     }
 }

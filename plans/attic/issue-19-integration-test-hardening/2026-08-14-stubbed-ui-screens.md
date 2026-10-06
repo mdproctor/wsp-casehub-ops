@@ -28,8 +28,8 @@ vitest, React Flow (via graph-renderer)
 - TDD: write failing test → verify fail → implement → verify pass → commit
 - Each commit references issue: `Refs casehubio/casehub-ops#38`
 - Package root: `io.casehub.ops.app`
-- Source root: `app/src/main/java/io/casehub/ops/app/`
-- Test root: `app/src/test/java/io/casehub/ops/app/`
+- Source root: `service`
+- Test root: `service`
 - blocks-ui root: `/Users/mdproctor/claude/casehub/blocks-ui/`
 - Named datasource: `quarkus.datasource.app.*` for all JPA entities
 - Flyway path: `app/src/main/resources/db/app/migration/`
@@ -40,16 +40,16 @@ vitest, React Flow (via graph-renderer)
 ### Task 1: CVE Persistence — CveStore + JpaCveStore + CveEntity + Flyway
 
 **Files:**
-- Create: `app/src/main/java/io/casehub/ops/app/model/CveRecord.java`
-- Create: `app/src/main/java/io/casehub/ops/app/model/CveStatus.java`
-- Create: `app/src/main/java/io/casehub/ops/app/persistence/CveStore.java`
-- Create: `app/src/main/java/io/casehub/ops/app/persistence/JpaCveStore.java`
-- Create: `app/src/main/java/io/casehub/ops/app/entity/CveEntity.java`
+- Create: `service`
+- Create: `service`
+- Create: `service`
+- Create: `service`
+- Create: `service`
 - Create: `app/src/main/resources/db/app/migration/V6__cve_record.sql`
-- Test: `app/src/test/java/io/casehub/ops/app/persistence/JpaCveStoreTest.java`
+- Test: `service`
 
 **Interfaces:**
-- Consumes: `CveSeverity` (existing in `app/src/main/java/io/casehub/ops/app/model/CveEvent.java`)
+- Consumes: `CveSeverity` (existing in `service`)
 - Produces: `CveStore` interface — consumed by SecurityResource (Task 8), CveStatusObserver (Task 5)
 
 - [ ] **Step 1: Create CveStatus enum and CveRecord**
@@ -123,8 +123,8 @@ feat(#38): add CveStore persistence — interface, JPA impl, Flyway V6
 ### Task 2: ApplicationLifecycleService — updateServiceImage + rollbackToDeployment
 
 **Files:**
-- Modify: `app/src/main/java/io/casehub/ops/app/service/ApplicationLifecycleService.java`
-- Test: `app/src/test/java/io/casehub/ops/app/service/ApplicationLifecycleServiceTest.java`
+- Modify: `service`
+- Test: `service`
 
 **Interfaces:**
 - Consumes: `ApplicationEntity`, `ServiceDefinition`, `ClusterService`, `ReconciliationLoop`, `ApplicationGoalCompiler`
@@ -185,8 +185,8 @@ feat(#38): add updateServiceImage and rollbackToDeployment to lifecycle service
 ### Task 3: CveResponseCaseDescriptor
 
 **Files:**
-- Create: `app/src/main/java/io/casehub/ops/app/case_/CveResponseCaseDescriptor.java`
-- Test: `app/src/test/java/io/casehub/ops/app/case_/CveResponseCaseDescriptorTest.java`
+- Create: `service`
+- Test: `service`
 
 **Interfaces:**
 - Consumes: `ApplicationLifecycleService.updateServiceImage()` (Task 2), `NodeConvergenceTracker.register()`
@@ -242,8 +242,8 @@ feat(#38): add CveResponseCaseDescriptor — four-phase CVE remediation
 ### Task 4: ServiceUpgradeCaseDescriptor
 
 **Files:**
-- Create: `app/src/main/java/io/casehub/ops/app/case_/ServiceUpgradeCaseDescriptor.java`
-- Test: `app/src/test/java/io/casehub/ops/app/case_/ServiceUpgradeCaseDescriptorTest.java`
+- Create: `service`
+- Test: `service`
 
 **Interfaces:**
 - Consumes: `ApplicationLifecycleService.updateServiceImage()` (Task 2), `NodeConvergenceTracker.register()`
@@ -284,10 +284,10 @@ feat(#38): add ServiceUpgradeCaseDescriptor — four-phase service upgrade
 ### Task 5: CveStatusObserver + CaseDefinitionRegistrar Update
 
 **Files:**
-- Create: `app/src/main/java/io/casehub/ops/app/service/CveStatusObserver.java`
-- Modify: `app/src/main/java/io/casehub/ops/app/case_/CaseDefinitionRegistrar.java`
-- Test: `app/src/test/java/io/casehub/ops/app/service/CveStatusObserverTest.java`
-- Modify: `app/src/test/java/io/casehub/ops/app/case_/CaseDefinitionRegistrarTest.java`
+- Create: `service`
+- Modify: `service`
+- Test: `service`
+- Modify: `service`
 
 **Interfaces:**
 - Consumes: `CveStore.updateStatus()` (Task 1), `CveResponseCaseDescriptor.build()` (Task 3), `ServiceUpgradeCaseDescriptor.build()` (Task 4)
@@ -340,8 +340,8 @@ feat(#38): wire real case descriptors, add CveStatusObserver
 ### Task 6: ApplicationEventBroadcaster — SSE Infrastructure
 
 **Files:**
-- Create: `app/src/main/java/io/casehub/ops/app/service/ApplicationEventBroadcaster.java`
-- Test: `app/src/test/java/io/casehub/ops/app/service/ApplicationEventBroadcasterTest.java`
+- Create: `service`
+- Test: `service`
 
 **Interfaces:**
 - Consumes: CDI events (`ReconciliationCompletedEvent`, `CaseStateChangedEvent`, `ApplicationStatusChangedEvent`)
@@ -395,10 +395,10 @@ feat(#38): add ApplicationEventBroadcaster — SSE with ring buffer and gap dete
 ### Task 7: ScalingService Extraction
 
 **Files:**
-- Create: `app/src/main/java/io/casehub/ops/app/service/ScalingService.java`
-- Modify: `app/src/main/java/io/casehub/ops/app/rest/ScalingResource.java`
-- Test: `app/src/test/java/io/casehub/ops/app/service/ScalingServiceTest.java`
-- Modify: `app/src/test/java/io/casehub/ops/app/rest/ScalingResourceTest.java`
+- Create: `service`
+- Modify: `service`
+- Test: `service`
+- Modify: `service`
 
 **Interfaces:**
 - Consumes: `SituationScalingEvaluator`, `Event<ScalingRequestedEvent>`, `ObjectMapper`
@@ -438,19 +438,19 @@ refactor(#38): extract ScalingService from ScalingResource
 ### Task 8: REST Endpoint Wiring
 
 **Files:**
-- Modify: `app/src/main/java/io/casehub/ops/app/rest/ApplicationResource.java`
-- Modify: `app/src/main/java/io/casehub/ops/app/rest/CaseResource.java`
-- Modify: `app/src/main/java/io/casehub/ops/app/rest/DeploymentResource.java`
-- Modify: `app/src/main/java/io/casehub/ops/app/rest/ReconciliationResource.java`
-- Modify: `app/src/main/java/io/casehub/ops/app/rest/SecurityResource.java`
-- Modify: `app/src/main/java/io/casehub/ops/app/rest/ServiceOperationResource.java`
-- Create: `app/src/main/java/io/casehub/ops/app/rest/dto/UpgradeServiceRequest.java`
-- Create: `app/src/main/java/io/casehub/ops/app/rest/dto/RollbackRequest.java`
-- Test: `app/src/test/java/io/casehub/ops/app/rest/CaseResourceTest.java`
-- Test: `app/src/test/java/io/casehub/ops/app/rest/ReconciliationResourceTest.java`
-- Test: `app/src/test/java/io/casehub/ops/app/rest/SecurityResourceTest.java`
-- Test: `app/src/test/java/io/casehub/ops/app/rest/ServiceOperationResourceTest.java`
-- Modify: `app/src/test/java/io/casehub/ops/app/rest/DeploymentResourceTest.java`
+- Modify: `service`
+- Modify: `service`
+- Modify: `service`
+- Modify: `service`
+- Modify: `service`
+- Modify: `service`
+- Create: `service`
+- Create: `service`
+- Test: `service`
+- Test: `service`
+- Test: `service`
+- Test: `service`
+- Modify: `service`
 
 **Interfaces:**
 - Consumes: `ApplicationLifecycleService` (Task 2), `CveStore` (Task 1), `ApplicationEventBroadcaster` (Task 6), `ScalingService` (Task 7), `ServiceCaseRegistry`, `CaseHubRuntime`, `ReconciliationLoop`, `KubernetesEventSource`

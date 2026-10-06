@@ -37,7 +37,7 @@
 - Modify: `app/pom.xml` — add `casehub-blocks-summarisation-yaml` dependency
 - Create: `api/src/main/java/io/casehub/ops/api/lifecycle/DeploymentSummarisationEventTypes.java`
 - Create: `app/src/main/resources/META-INF/summarisation/deployment-monitoring.yaml`
-- Test: `app/src/test/java/io/casehub/ops/app/lifecycle/summarisation/DeploymentMonitoringPipelineTest.java`
+- Test: `service`
 
 **Interfaces:**
 - Consumes: `DesiredStateEventTypes` (L1 CloudEvent type URIs), `NodeFaultedData`/`NodeDriftedData`/`NodeRecoveredData` (payload schemas), `FaultType` (enum values for classification rules)
@@ -46,7 +46,7 @@
 - [ ] **Step 1: Write the pipeline validation test**
 
 ```java
-package io.casehub.ops.app.lifecycle.summarisation;
+package io.casehub.ops.service.lifecycle.summarisation;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.fasterxml.jackson.dataformat.yaml.YAMLFactory;
@@ -64,8 +64,8 @@ import static org.assertj.core.api.Assertions.assertThat;
 
 class DeploymentMonitoringPipelineTest {
 
-    static final ObjectMapper MAPPER = new ObjectMapper(new YAMLFactory());
-    static final ExpressionEngine EXPR = new MvelExpressionEngine();
+    static final ObjectMapper     MAPPER = new ObjectMapper(new YAMLFactory());
+    static final ExpressionEngine EXPR   = new MvelExpressionEngine();
 
     PipelineDefinition definition;
     SummariserRegistry registry;
@@ -82,10 +82,10 @@ class DeploymentMonitoringPipelineTest {
                 config -> ThresholdClassifySummariser.create(config, EXPR));
         registry.register("phase-detect", (SummariserFactory) config -> {
             var aggregateFields = definition.levels().stream()
-                    .filter(l -> l.summariser().type().equals("phase-detect"))
-                    .findFirst()
-                    .map(LevelDefinition::aggregateFields)
-                    .orElse(List.of());
+                                            .filter(l -> l.summariser().type().equals("phase-detect"))
+                                            .findFirst()
+                                            .map(LevelDefinition::aggregateFields)
+                                            .orElse(List.of());
             return PhaseDetectSummariser.create(config, aggregateFields);
         });
     }
@@ -102,8 +102,8 @@ class DeploymentMonitoringPipelineTest {
     void validationPasses() {
         var errors = new PipelineValidator().validate(definition, registry);
         var realErrors = errors.stream()
-                .filter(e -> e.level() == PipelineValidator.ValidationError.Level.ERROR)
-                .toList();
+                               .filter(e -> e.level() == PipelineValidator.ValidationError.Level.ERROR)
+                               .toList();
         assertThat(realErrors).isEmpty();
     }
 }
@@ -360,8 +360,8 @@ HEALTHY/DEGRADED/RECOVERING transitions. Refs casehubio/casehub-ops#84"
 ### Task 2: Deployment Topology RAS Situation Definitions
 
 **Files:**
-- Create: `app/src/main/java/io/casehub/ops/app/lifecycle/ras/DeploymentTopologySituationDefinitionProvider.java`
-- Test: `app/src/test/java/io/casehub/ops/app/lifecycle/ras/DeploymentTopologySituationDefinitionProviderTest.java`
+- Create: `service`
+- Test: `service`
 
 **Interfaces:**
 - Consumes: `DeploymentSummarisationEventTypes.PHASE` (L3 CloudEvent type), `GanglionDescriptor.ExpressionRules` (RAS API), `SituationRegistration` + `SituationDefinition` + `ChainMode` (RAS API), `LambdaExpression` (platform API)
@@ -370,7 +370,7 @@ HEALTHY/DEGRADED/RECOVERING transitions. Refs casehubio/casehub-ops#84"
 - [ ] **Step 1: Write the failing test**
 
 ```java
-package io.casehub.ops.app.lifecycle.ras;
+package io.casehub.ops.service.lifecycle.ras;
 
 import io.casehub.ops.api.lifecycle.DeploymentSummarisationEventTypes;
 import org.junit.jupiter.api.BeforeEach;
@@ -392,10 +392,10 @@ class DeploymentTopologySituationDefinitionProviderTest {
         var ganglia = provider.ganglionDescriptors();
         assertThat(ganglia).hasSize(3);
         assertThat(ganglia).extracting("id")
-                .containsExactlyInAnyOrder(
-                        "deployment-degraded",
-                        "deployment-recovering",
-                        "deployment-healthy");
+                           .containsExactlyInAnyOrder(
+                                   "deployment-degraded",
+                                   "deployment-recovering",
+                                   "deployment-healthy");
     }
 
     @Test
@@ -405,7 +405,7 @@ class DeploymentTopologySituationDefinitionProviderTest {
             assertThat(g).isInstanceOfSatisfying(
                     io.casehub.ras.api.GanglionDescriptor.ExpressionRules.class,
                     er -> assertThat(er.eventTypes())
-                            .contains(DeploymentSummarisationEventTypes.PHASE));
+                                  .contains(DeploymentSummarisationEventTypes.PHASE));
         }
     }
 
@@ -428,7 +428,7 @@ Expected: FAIL — class not found
 - [ ] **Step 3: Implement DeploymentTopologySituationDefinitionProvider**
 
 ```java
-package io.casehub.ops.app.lifecycle.ras;
+package io.casehub.ops.service.lifecycle.ras;
 
 import io.casehub.ops.api.lifecycle.DeploymentSummarisationEventTypes;
 import io.casehub.platform.api.expression.LambdaExpression;
@@ -441,9 +441,9 @@ import java.util.*;
 @ApplicationScoped
 public class DeploymentTopologySituationDefinitionProvider implements SituationDefinitionProvider {
 
-    public static final String DEGRADED_ID = "deployment-degraded";
+    public static final String DEGRADED_ID   = "deployment-degraded";
     public static final String RECOVERING_ID = "deployment-recovering";
-    public static final String HEALTHY_ID = "deployment-healthy";
+    public static final String HEALTHY_ID    = "deployment-healthy";
 
     @Override
     public List<GanglionDescriptor> ganglionDescriptors() {
@@ -485,8 +485,8 @@ public class DeploymentTopologySituationDefinitionProvider implements SituationD
 
     @SuppressWarnings("unchecked")
     private static GanglionDescriptor ganglion(String id,
-                                                java.util.function.Function<Map, Boolean> condition,
-                                                double confidence) {
+                                               java.util.function.Function<Map, Boolean> condition,
+                                               double confidence) {
         return new GanglionDescriptor.ExpressionRules(
                 id,
                 Set.of(DeploymentSummarisationEventTypes.PHASE),
@@ -892,7 +892,7 @@ Refs casehubio/casehub-ops#84"
 - `docs/specs/issue-74-topology-implementation/2026-09-02-summarisation-ras-integration-design.md` — design spec (9 decisions: D1–D9)
 - `blocks/summarisation-yaml/src/test/resources/META-INF/summarisation/logistics-hub.yaml` — reference YAML pipeline
 - `blocks/summarisation-yaml/src/test/java/.../LogisticsIntegrationTest.java` — reference test pattern
-- `app/src/main/java/io/casehub/ops/app/lifecycle/ras/OpsMonitoringSituationDefinitionProvider.java` — existing RAS pattern (37 ganglia)
+- `service` — existing RAS pattern (37 ganglia)
 - `src/main/java/io/casehub/desiredstate/ras/DesiredStateSituationDefinitionProvider.java` — situation registration pattern
 - `src/main/java/io/casehub/desiredstate/api/DesiredStateEventTypes.java` — L1 CloudEvent type URIs
 - `src/main/java/io/casehub/desiredstate/api/NodeFaultedData.java` — faultType field (L2 discriminator)

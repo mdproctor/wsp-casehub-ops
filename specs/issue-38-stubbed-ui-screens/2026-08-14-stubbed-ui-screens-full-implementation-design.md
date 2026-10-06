@@ -101,7 +101,7 @@ update via fabric8.
 
 ### ApplicationEventBroadcaster
 
-New service in `app/src/main/java/io/casehub/ops/app/service/`.
+New service in `service`.
 
 `@ApplicationScoped` CDI bean aggregating three event sources into a single
 SSE stream per application:

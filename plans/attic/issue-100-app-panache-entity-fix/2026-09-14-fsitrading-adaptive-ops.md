@@ -359,7 +359,7 @@ Co-Authored-By: Claude Opus 4.6 (1M context) <noreply@anthropic.com>"
 - Delete: `deployment/src/main/java/io/casehub/ops/deployment/adaptation/AdaptiveTopologyManager.java`
 - Delete: `deployment/src/test/java/io/casehub/ops/deployment/adaptation/AdaptiveTopologyManagerTest.java`
 - Delete: `deployment/src/test/java/io/casehub/ops/deployment/adaptation/AdaptiveTopologyIntegrationTest.java`
-- Delete: `app/src/main/java/io/casehub/ops/app/spi/StubSituationSource.java`
+- Delete: `service`
 - Modify: any files that reference `AdaptiveTopologyManager` or `StubSituationSource`
 
 **Interfaces:**

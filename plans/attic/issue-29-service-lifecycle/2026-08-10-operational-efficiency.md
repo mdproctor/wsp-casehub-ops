@@ -486,8 +486,8 @@ Refs #31"
 ### Task 4: DimensionStatusService — Status Persistence + Migrate resolveStatus
 
 **Files:**
-- Modify: `app/src/main/java/io/casehub/ops/app/lifecycle/DimensionStatusService.java`
-- Modify: `app/src/test/java/io/casehub/ops/app/lifecycle/DimensionStatusServiceTest.java`
+- Modify: `service`
+- Modify: `service`
 
 **Interfaces:**
 - Consumes: `DimensionType.resolveStatus(String)`, `OperationalDimension.section().put()`
@@ -594,8 +594,8 @@ Refs #31"
 ### Task 5: ServiceCaseRegistry — getOrReconstruct + Metadata Persistence + serviceId Index
 
 **Files:**
-- Modify: `app/src/main/java/io/casehub/ops/app/lifecycle/ServiceCaseRegistry.java`
-- Modify: `app/src/test/java/io/casehub/ops/app/lifecycle/ServiceCaseRegistryTest.java`
+- Modify: `service`
+- Modify: `service`
 
 **Interfaces:**
 - Consumes: `ServiceCaseContext.createForReconstruction(...)`, `DimensionType.resolveStatus(String)`, `DimensionType.defaultStatus()`
@@ -815,8 +815,8 @@ Refs #31"
 ### Task 6: ServiceDetectionBridge — Load-on-Demand + activeResponseIds Persistence
 
 **Files:**
-- Modify: `app/src/main/java/io/casehub/ops/app/lifecycle/ServiceDetectionBridge.java`
-- Modify: `app/src/test/java/io/casehub/ops/app/lifecycle/ServiceDetectionBridgeTest.java`
+- Modify: `service`
+- Modify: `service`
 
 **Interfaces:**
 - Consumes: `OperationalDimension.isLoaded()`, `OperationalDimension.load(ContextReader)`, `ServiceCaseRegistry.getOrReconstruct(UUID, ContextWriter, ContextReader)`

@@ -165,8 +165,8 @@ git commit -m "feat(#99): PodmanClient.events() — NDJSON streaming from Podman
 ### Task 2: PodmanWatchManager
 
 **Files:**
-- Create: `app/src/main/java/io/casehub/ops/app/container/PodmanWatchManager.java`
-- Test: `app/src/test/java/io/casehub/ops/app/container/PodmanWatchManagerTest.java`
+- Create: `service`
+- Test: `service`
 
 **Interfaces:**
 - Consumes: `PodmanClient.events(String type)` (Task 1), `ContainerEventSource.emit(StateEvent)` (#98), `NodeId`, `NodeStatus`, `StateEvent`
@@ -175,7 +175,7 @@ git commit -m "feat(#99): PodmanClient.events() — NDJSON streaming from Podman
 - [ ] **Step 1: Write the failing test**
 
 ```java
-package io.casehub.ops.app.container;
+package io.casehub.ops.service.container;
 
 import io.casehub.desiredstate.api.NodeId;
 import io.casehub.desiredstate.api.NodeStatus;
@@ -193,13 +193,13 @@ import static org.assertj.core.api.Assertions.assertThat;
 class PodmanWatchManagerTest {
 
     private SimulatingPodmanClient podmanClient;
-    private ContainerEventSource eventSource;
-    private PodmanWatchManager watchManager;
+    private ContainerEventSource   eventSource;
+    private PodmanWatchManager     watchManager;
 
     @BeforeEach
     void setUp() {
         podmanClient = new SimulatingPodmanClient();
-        eventSource = new ContainerEventSource();
+        eventSource  = new ContainerEventSource();
         watchManager = new PodmanWatchManager(podmanClient, eventSource);
         watchManager.start(null);
     }
@@ -207,121 +207,121 @@ class PodmanWatchManagerTest {
     @Test
     void die_event_emits_drifted() {
         var future = eventSource.stream()
-            .select().first(1)
-            .collect().asList()
-            .subscribeAsCompletionStage();
+                                .select().first(1)
+                                .collect().asList()
+                                .subscribeAsCompletionStage();
 
         podmanClient.emitEvent(podmanEvent("die", "myapp",
-            new JsonObject().put("exitCode", "137")));
+                                           new JsonObject().put("exitCode", "137")));
 
         assertThat(future).succeedsWithin(Duration.ofSeconds(2))
-            .asList().singleElement().satisfies(e -> {
-                var event = (StateEvent) e;
-                assertThat(event.node()).isEqualTo(NodeId.of("myapp"));
-                assertThat(event.newStatus()).isEqualTo(NodeStatus.DRIFTED);
-                assertThat(event.detail()).contains("exit code 137");
-            });
+                          .asList().singleElement().satisfies(e -> {
+                              var event = (StateEvent) e;
+                              assertThat(event.node()).isEqualTo(NodeId.of("myapp"));
+                              assertThat(event.newStatus()).isEqualTo(NodeStatus.DRIFTED);
+                              assertThat(event.detail()).contains("exit code 137");
+                          });
     }
 
     @Test
     void stop_event_emits_suspended() {
         var future = eventSource.stream()
-            .select().first(1)
-            .collect().asList()
-            .subscribeAsCompletionStage();
+                                .select().first(1)
+                                .collect().asList()
+                                .subscribeAsCompletionStage();
 
         podmanClient.emitEvent(podmanEvent("stop", "myapp"));
 
         assertThat(future).succeedsWithin(Duration.ofSeconds(2))
-            .asList().singleElement().satisfies(e -> {
-                var event = (StateEvent) e;
-                assertThat(event.newStatus()).isEqualTo(NodeStatus.SUSPENDED);
-            });
+                          .asList().singleElement().satisfies(e -> {
+                              var event = (StateEvent) e;
+                              assertThat(event.newStatus()).isEqualTo(NodeStatus.SUSPENDED);
+                          });
     }
 
     @Test
     void remove_event_emits_absent() {
         var future = eventSource.stream()
-            .select().first(1)
-            .collect().asList()
-            .subscribeAsCompletionStage();
+                                .select().first(1)
+                                .collect().asList()
+                                .subscribeAsCompletionStage();
 
         podmanClient.emitEvent(podmanEvent("remove", "myapp"));
 
         assertThat(future).succeedsWithin(Duration.ofSeconds(2))
-            .asList().singleElement().satisfies(e -> {
-                var event = (StateEvent) e;
-                assertThat(event.newStatus()).isEqualTo(NodeStatus.ABSENT);
-            });
+                          .asList().singleElement().satisfies(e -> {
+                              var event = (StateEvent) e;
+                              assertThat(event.newStatus()).isEqualTo(NodeStatus.ABSENT);
+                          });
     }
 
     @Test
     void start_event_emits_present() {
         var future = eventSource.stream()
-            .select().first(1)
-            .collect().asList()
-            .subscribeAsCompletionStage();
+                                .select().first(1)
+                                .collect().asList()
+                                .subscribeAsCompletionStage();
 
         podmanClient.emitEvent(podmanEvent("start", "myapp"));
 
         assertThat(future).succeedsWithin(Duration.ofSeconds(2))
-            .asList().singleElement().satisfies(e -> {
-                var event = (StateEvent) e;
-                assertThat(event.newStatus()).isEqualTo(NodeStatus.PRESENT);
-            });
+                          .asList().singleElement().satisfies(e -> {
+                              var event = (StateEvent) e;
+                              assertThat(event.newStatus()).isEqualTo(NodeStatus.PRESENT);
+                          });
     }
 
     @Test
     void health_status_unhealthy_emits_drifted() {
         var future = eventSource.stream()
-            .select().first(1)
-            .collect().asList()
-            .subscribeAsCompletionStage();
+                                .select().first(1)
+                                .collect().asList()
+                                .subscribeAsCompletionStage();
 
         podmanClient.emitEvent(podmanEvent("health_status", "myapp",
-            new JsonObject().put("healthstatus", "unhealthy")));
+                                           new JsonObject().put("healthstatus", "unhealthy")));
 
         assertThat(future).succeedsWithin(Duration.ofSeconds(2))
-            .asList().singleElement().satisfies(e -> {
-                var event = (StateEvent) e;
-                assertThat(event.newStatus()).isEqualTo(NodeStatus.DRIFTED);
-                assertThat(event.detail()).isEqualTo("health check failed");
-            });
+                          .asList().singleElement().satisfies(e -> {
+                              var event = (StateEvent) e;
+                              assertThat(event.newStatus()).isEqualTo(NodeStatus.DRIFTED);
+                              assertThat(event.detail()).isEqualTo("health check failed");
+                          });
     }
 
     @Test
     void health_status_healthy_emits_present() {
         var future = eventSource.stream()
-            .select().first(1)
-            .collect().asList()
-            .subscribeAsCompletionStage();
+                                .select().first(1)
+                                .collect().asList()
+                                .subscribeAsCompletionStage();
 
         podmanClient.emitEvent(podmanEvent("health_status", "myapp",
-            new JsonObject().put("healthstatus", "healthy")));
+                                           new JsonObject().put("healthstatus", "healthy")));
 
         assertThat(future).succeedsWithin(Duration.ofSeconds(2))
-            .asList().singleElement().satisfies(e -> {
-                var event = (StateEvent) e;
-                assertThat(event.newStatus()).isEqualTo(NodeStatus.PRESENT);
-                assertThat(event.detail()).isEqualTo("health check passed");
-            });
+                          .asList().singleElement().satisfies(e -> {
+                              var event = (StateEvent) e;
+                              assertThat(event.newStatus()).isEqualTo(NodeStatus.PRESENT);
+                              assertThat(event.detail()).isEqualTo("health check passed");
+                          });
     }
 
     @Test
     void unknown_action_is_filtered() {
         var future = eventSource.stream()
-            .select().first(1)
-            .collect().asList()
-            .subscribeAsCompletionStage();
+                                .select().first(1)
+                                .collect().asList()
+                                .subscribeAsCompletionStage();
 
         podmanClient.emitEvent(podmanEvent("create", "myapp"));
         podmanClient.emitEvent(podmanEvent("start", "myapp"));
 
         assertThat(future).succeedsWithin(Duration.ofSeconds(2))
-            .asList().singleElement().satisfies(e -> {
-                var event = (StateEvent) e;
-                assertThat(event.newStatus()).isEqualTo(NodeStatus.PRESENT);
-            });
+                          .asList().singleElement().satisfies(e -> {
+                              var event = (StateEvent) e;
+                              assertThat(event.newStatus()).isEqualTo(NodeStatus.PRESENT);
+                          });
     }
 
     @Test
@@ -337,10 +337,10 @@ class PodmanWatchManagerTest {
     private static JsonObject podmanEvent(String action, String containerName, JsonObject extraAttrs) {
         var attrs = new JsonObject().put("name", containerName).mergeIn(extraAttrs);
         return new JsonObject()
-            .put("Type", "container")
-            .put("Action", action)
-            .put("Actor", new JsonObject()
-                .put("Attributes", attrs));
+                       .put("Type", "container")
+                       .put("Action", action)
+                       .put("Actor", new JsonObject()
+                                             .put("Attributes", attrs));
     }
 }
 ```
@@ -353,7 +353,7 @@ Expected: FAIL — `PodmanWatchManager` class does not exist
 - [ ] **Step 3: Write PodmanWatchManager implementation**
 
 ```java
-package io.casehub.ops.app.container;
+package io.casehub.ops.service.container;
 
 import io.casehub.desiredstate.api.NodeId;
 import io.casehub.desiredstate.api.NodeStatus;
@@ -377,28 +377,28 @@ public class PodmanWatchManager {
 
     private static final Logger LOG = Logger.getLogger(PodmanWatchManager.class.getName());
 
-    private final PodmanClient podmanClient;
-    private final ContainerEventSource eventSource;
-    private volatile Cancellable subscription;
+    private final    PodmanClient         podmanClient;
+    private final    ContainerEventSource eventSource;
+    private volatile Cancellable          subscription;
 
     @Inject
     public PodmanWatchManager(PodmanClient podmanClient, ContainerEventSource eventSource) {
         this.podmanClient = podmanClient;
-        this.eventSource = eventSource;
+        this.eventSource  = eventSource;
     }
 
     void start(@Observes StartupEvent event) {
         subscription = podmanClient.events("container")
-            .map(PodmanWatchManager::translateEvent)
-            .filter(Objects::nonNull)
-            .onFailure().invoke(t -> LOG.warning("Podman event stream disconnected: " + t.getMessage()))
-            .onFailure().retry()
-                .withBackOff(Duration.ofSeconds(1), Duration.ofSeconds(30))
-                .indefinitely()
-            .subscribe().with(
-                stateEvent -> eventSource.emit(stateEvent),
-                t -> LOG.severe("Podman event stream failed permanently: " + t.getMessage())
-            );
+                                   .map(PodmanWatchManager::translateEvent)
+                                   .filter(Objects::nonNull)
+                                   .onFailure().invoke(t -> LOG.warning("Podman event stream disconnected: " + t.getMessage()))
+                                   .onFailure().retry()
+                                   .withBackOff(Duration.ofSeconds(1), Duration.ofSeconds(30))
+                                   .indefinitely()
+                                   .subscribe().with(
+                        stateEvent -> eventSource.emit(stateEvent),
+                        t -> LOG.severe("Podman event stream failed permanently: " + t.getMessage())
+                                                    );
         LOG.info("Podman event stream subscription started");
     }
 
@@ -417,8 +417,8 @@ public class PodmanWatchManager {
     }
 
     static StateEvent translateEvent(JsonObject event) {
-        String action = event.getString("Action");
-        JsonObject actor = event.getJsonObject("Actor");
+        String     action = event.getString("Action");
+        JsonObject actor  = event.getJsonObject("Actor");
         if (actor == null) return null;
         JsonObject attrs = actor.getJsonObject("Attributes");
         if (attrs == null) return null;
@@ -431,7 +431,7 @@ public class PodmanWatchManager {
             case "die" -> {
                 String exitCode = attrs.getString("exitCode", "unknown");
                 yield new StateEvent(nodeId, NodeStatus.DRIFTED,
-                    "container died: exit code " + exitCode);
+                                     "container died: exit code " + exitCode);
             }
             case "stop" -> new StateEvent(nodeId, NodeStatus.SUSPENDED, "container stopped");
             case "remove" -> new StateEvent(nodeId, NodeStatus.ABSENT, "container removed");
