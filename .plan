@@ -13,3 +13,9 @@ flyway-next-v:
 
 ## Queue
 - [ ] casehubio/casehub-ops#118 — Issue #118 ← active
+  - [ ] Batch 1: Scaffold service module
+    - [ ] Task 1: Create service/pom.xml + update parent pom
+  - [ ] Batch 2: Extract source + slim app
+    - [ ] Task 2: Package rename + source extraction
+    - [ ] Task 3: Split tests + slim app pom + fix configs
+    - [ ] Task 4: Build verification
