@@ -47,4 +47,5 @@ squash_attempt=1
 squash=done
 squash_produced=1
 report_squash=done
-land_mechanical_attempt=1
+land_mechanical_attempt=2
+_landed_sha:ops=5ab6658a2bbaee4338fcb6f36d97cbed99ee40d9
