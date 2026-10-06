@@ -1,34 +1,35 @@
-# Handover — issue-25-fsitrading-adaptive-ops
+# Handover — issue-118-extract-ops-service-module
 
-**Branch:** `issue-25-fsitrading-adaptive-ops` (ops + fsitrading)
-**Issue:** casehubio/casehub-ops#25
-**Status:** Batch 1 of 4 complete
+**Branch:** `issue-118-extract-ops-service-module`
+**Issue:** casehubio/casehub-ops#118
+**Status:** Spec complete, needs writing-plans → implementation
 
 ## What happened
 
-Designed and reviewed the full-stack adaptive ops spec, then implemented Batch 1 (ops-side recompiler). Key discovery: desiredstate#49 delivered `SituationRecompiler` (push-based) not `SituationSource` (pull-based) — spec updated accordingly. Design review ran standard depth (4 dimensions, 69 issues, 0 unresolved, $79). Late design addition: YAML-based situation definitions (`YamlSituationDefinitionProvider`) instead of hand-coded Java.
+Delivered #116 (PoolNodeSpec — 7th deployment node type). Full brainstorm → implement → work-end cycle. 226 deployment tests green, merged to main, pushed to both remotes.
+
+Architecture discussion about deployment profiles, bootstrap model, and qhorus mesh deployment led to three new issues: #117 (deployment profiles), #118 (extract ops/service), #119 (GraphQL generation). Updated #118 scope with deployment profile context.
+
+Brainstormed and wrote spec for #118: extract all Java source from ops/app into ops/service library module. Package rename `io.casehub.ops.app` → `io.casehub.ops.service`. ops/app becomes a thin Quarkus shell.
 
 ## Decisions
 
-- Recompile from base with all tracked situations every time (never patch incrementally)
-- Full Ganglion with summarisation-enhanced RAS detection
-- `YamlSituationDefinitionProvider` generic base in ops-deployment, YAML files in fsitrading
+- Everything moves to ops/service (APIs, entities, services, K8s, SPI stubs, case descriptors, migrations)
+- ops/app retains only pom.xml + application.properties
+- Flyway migrations follow entities into ops/service
 
 ## Next action
 
-Continue with Batch 2 (fsitrading event types + CloudEvent bridge). Run `work continue`.
+Run `work continue` → invoke writing-plans on the spec, then execute the extraction.
 
 ## Cross-repo blockers
 
-- desiredstate-api: `situationResolved()` default method — needs cross-repo issue filed
-- desiredstate runtime: dispatch layer (`SituationChangeEvent` → `SituationRecompilerEngine`) — needs cross-repo issue filed
+- scaffold#53 blocked by this issue (needs ops/service to embed ops)
 
 ## References
 
 | Artifact | Path |
 |----------|------|
-| Spec | `wsp/specs/issue-25-fsitrading-adaptive-ops/2026-09-14-fsitrading-adaptive-ops-design.md` |
-| Plan | `wsp/plans/2026-09-14-fsitrading-adaptive-ops.md` |
-| Decisions | `wsp/specs/issue-25-fsitrading-adaptive-ops/decisions.md` |
-| Journal | `wsp/JOURNAL.md` |
-| .plan | `wsp/.plan` (Batch 1 checked, 3 remaining) |
+| Spec | `wksp/specs/issue-118-extract-ops-service-module/2026-10-06-extract-ops-service-design.md` |
+| Decisions | `wksp/specs/issue-118-extract-ops-service-module/decisions.md` |
+| Journal | `wksp/JOURNAL.md` |
