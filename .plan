@@ -1,0 +1,15 @@
+# Work Plan — issue-94-topology-observation-endpoint
+
+## State
+branch: issue-94-topology-observation-endpoint
+state: scaffolded
+project-sha: 
+date: 
+issue-repo: casehubio/casehub-ops
+covers: 94
+design-repo: 
+design-section-hashes: 
+flyway-next-v: 
+
+## Queue
+- [ ] casehubio/casehub-ops#94 — Issue #94 ← active
