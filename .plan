@@ -10,13 +10,7 @@ covers: 118
 design-repo: 
 design-section-hashes: 
 flyway-next-v: 
-
 evidence-era: true
+
 ## Queue
-- [ ] casehubio/casehub-ops#118 — Issue #118 ← active
-  - [x] Batch 1: Scaffold service module
-    - [x] Task 1: Create service/pom.xml + update parent pom
-  - [x] Batch 2: Extract source + slim app
-    - [x] Task 2: Package rename + source extraction
-    - [x] Task 3: Split tests + slim app pom + fix configs
-    - [x] Task 4: Build verification
+- [x] casehubio/casehub-ops#118 — Issue #118
