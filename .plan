@@ -2,7 +2,7 @@
 
 ## State
 branch: issue-118-extract-ops-service-module
-state: active
+state: closing:review
 project-sha: 
 date: 
 issue-repo: casehubio/casehub-ops
@@ -11,6 +11,7 @@ design-repo:
 design-section-hashes: 
 flyway-next-v: 
 
+evidence-era: true
 ## Queue
 - [ ] casehubio/casehub-ops#118 — Issue #118 ← active
   - [x] Batch 1: Scaffold service module
