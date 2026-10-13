@@ -13,11 +13,11 @@ flyway-next-v:
 
 ## Queue
 - [ ] casehubio/casehub-ops#83 — Issue #83 ← active
-  - [ ] Batch 1: API Types
-    - [ ] Task 1: CaseHubApplicationSpec + RuntimeConfig + sealed hierarchy + DeploymentGoals
-    - [ ] Task 2: SPI Contracts - Build Pipeline + Deployment Target
-  - [ ] Batch 2: Deployment Wiring
-    - [ ] Task 3: CaseHubAppProvisionHandler + CaseHubAppDriftChecker
-    - [ ] Task 4: Wire into GoalCompiler NodeProvisioner ActualStateAdapter ApprovalEvaluator
-  - [ ] Batch 3: Integration
-    - [ ] Task 5: Reconciliation integration test
+  - [x] Batch 1: API Types
+    - [x] Task 1: CaseHubApplicationSpec + RuntimeConfig + sealed hierarchy + DeploymentGoals
+    - [x] Task 2: SPI Contracts - Build Pipeline + Deployment Target
+  - [x] Batch 2: Deployment Wiring
+    - [x] Task 3: CaseHubAppProvisionHandler + CaseHubAppDriftChecker
+    - [x] Task 4: Wire into GoalCompiler NodeProvisioner ActualStateAdapter ApprovalEvaluator
+  - [x] Batch 3: Integration
+    - [x] Task 5: Reconciliation integration test
