@@ -1,2 +1,0 @@
-{"event":"land","repo":"ops","branch":"issue-117-deployment-profiles-bootstrap","base_branch":"main","landed_sha":"2ab9351a1de50798ce1fb22d6f3ec31fd78cf65a","push_target":"upstream","mirrored":true,"stamped":true,"timestamp":"2026-10-14T02:50:24.394807+00:00"}
-{"event":"promote","branch":"issue-127-claudony-desiredstate-integration","files":[],"timestamp":"2026-10-14T03:58:22.883206+00:00"}
