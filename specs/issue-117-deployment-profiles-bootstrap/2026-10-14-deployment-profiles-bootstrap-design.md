@@ -46,14 +46,17 @@ META-INF/desiredstate/
 
 All `casehub_application` nodes (Qhorus, Eidos, Engine, ops-app) live in a single topology YAML file. This ensures `dependsOn` references resolve within one `DesiredStateGraph` — cross-file `dependsOn` between separate YAML graphs is not supported without `CrossDomainCompositionEngine` domain registration, and two domains providing the same `NodeType` triggers `validateDuplicateProvides()`.
 
-Infrastructure is profile-specific — different profiles use different infrastructure types (`DatabaseContainerSpec` vs `DatabaseClusterSpec`, `NetworkSpec` vs `K8sNamespaceSpec`). Profile-specific infra is loaded from `META-INF/desiredstate/modules/` and imported by the main topology:
+Infrastructure is profile-specific — different profiles use different infrastructure types (`DatabaseContainerSpec` vs `DatabaseClusterSpec`, `NetworkSpec` vs `K8sNamespaceSpec`). Profile-specific infra modules are shipped in the ops JAR at `META-INF/desiredstate/modules/`:
 
 ```
 META-INF/desiredstate/modules/
-  casehub-infra-local-dev.yaml         # H2 placeholder, no-op network
   casehub-infra-local-distributed.yaml # container:database, podman network
   casehub-infra-enterprise.yaml        # database_cluster, k8s namespace
 ```
+
+These infra modules are **not** imported by the topology YAML via `imports:` — the topology is profile-agnostic. Instead, the `BootstrapDomainRegistrar` loads the matching infra module at runtime, compiles it into a separate `DesiredStateGraph`, and registers it as a distinct domain with `CrossDomainCompositionEngine`. Cross-domain dependency edges (infra → deployment) are added by the composition engine based on `provides`/`requires` sets.
+
+**`local-dev` has no infra module** — PostgreSQL is H2 via Quarkus `%dev` config, not a topology node. The `BootstrapDomainRegistrar` skips infra domain registration entirely for `local-dev`.
 
 Reusable infrastructure modules (load-balancer, HA, service-mesh) remain at this established `META-INF/desiredstate/modules/` path alongside the profile-specific infra modules.
 
@@ -73,42 +76,74 @@ public class DeploymentNodeSpecFactoryProvider implements NodeSpecFactoryProvide
         return Map.of("casehub_application", specMap -> {
             Map<String, Object> fields = new LinkedHashMap<>(specMap);
             String deploymentTarget = (String) fields.remove("deploymentTarget");
+            String existing = (String) fields.remove("existing");
             CaseHubApplicationSpec appSpec = mapper.convertValue(fields, CaseHubApplicationSpec.class);
-            return deploymentTarget != null
-                ? new DeploymentApplicationNodeSpec(appSpec, deploymentTarget)
+            return (deploymentTarget != null || existing != null)
+                ? new DeploymentApplicationNodeSpec(appSpec, deploymentTarget, existing)
                 : appSpec;
         });
     }
 }
 ```
 
-When `deploymentTarget` is present in the spec map, the factory wraps the spec in `DeploymentApplicationNodeSpec(CaseHubApplicationSpec spec, String deploymentTargetId)` implementing `NodeSpec` — mirroring the `InfraDesiredNodeSpec(InfraNodeSpec, backendId)` pattern. When absent, the bare `CaseHubApplicationSpec` is returned and the profile default target is used.
+When `deploymentTarget` or `existing` is present in the spec map, the factory wraps the spec in `DeploymentApplicationNodeSpec(CaseHubApplicationSpec spec, String deploymentTargetId, String existingUrl)` implementing `NodeSpec` — mirroring the `InfraDesiredNodeSpec(InfraNodeSpec, backendId)` pattern. When neither is present, the bare `CaseHubApplicationSpec` is returned and the profile default target is used.
 
-**Cross-domain ordering — production DomainRegistration wiring:** The `CrossDomainCompositionEngine` has been tested but not wired in production. This spec adds `BootstrapDomainRegistrar` CDI beans that register domains at startup:
+**Dual-type provisioner dispatch:** `DeploymentApplicationNodeSpec` implements `NodeSpec` (not `DeploymentNodeSpec`), so it falls outside the sealed type switch in `DeploymentNodeProvisioner`. The provisioner adds an `instanceof` check before the sealed switch:
+
+```java
+if (spec instanceof DeploymentApplicationNodeSpec wrapper) {
+    // unwrap, resolve deployment target, check existing URL, delegate to appHandler
+    return appHandler.provision(wrapper.spec(), context, wrapper.deploymentTargetId(), wrapper.existingUrl());
+} else if (spec instanceof DeploymentNodeSpec dSpec) {
+    switch (dSpec) { ... }  // existing exhaustive sealed switch
+}
+```
+
+This deviates from ARC42STORIES §Layer L3's "exhaustive sealed type switch" pattern. The deviation is justified: the deployment domain has two YAML processing paths — the existing `DeploymentGoalLoader` (produces bare `DeploymentNodeSpec` instances for the domain-specific format) and the new `DeploymentNodeSpecFactoryProvider` (produces `DeploymentApplicationNodeSpec` wrappers for the `desiredState:` format). This parallels the infra domain, where `InfraNodeProvisioner` always unwraps `InfraDesiredNodeSpec` — the difference is that infra uses a wrapper for ALL nodes, while deployment uses it only for nodes processed through the `desiredState:` path.
+
+**Cross-domain ordering — production DomainRegistration wiring:** The `CrossDomainCompositionEngine` has been tested but not wired in production. This spec adds `BootstrapDomainRegistrar` in `service/` that registers domains at startup. The registrar is **profile-aware** — `provides`/`requires` sets are derived from the actual compiled graphs, not hardcoded:
 
 ```java
 @ApplicationScoped
 public class BootstrapDomainRegistrar {
     @Inject CrossDomainCompositionEngine engine;
+    @ConfigProperty(name = "casehub.ops.deployment-profile") String profile;
 
     void onStartup(@Observes StartupEvent event) {
-        // Container domain: provides container:database, network, volume
-        engine.registerDomain(DomainRegistration.builder(
-            DomainId.of("container"), containerCompilationResult)
-            .provides(Set.of(NodeType.of("container:database"), NodeType.of("network"), NodeType.of("volume")))
-            .build());
+        // 1. Load and compile the profile-specific infra module (if any)
+        Set<NodeType> infraProvides = Set.of();
+        if (!"local-dev".equals(profile)) {
+            String modulePath = "META-INF/desiredstate/modules/casehub-infra-" + profile + ".yaml";
+            CompilationResult infraResult = compileInfraModule(modulePath);
+            infraProvides = infraResult.graph().nodeTypes();  // derived, not hardcoded
+            engine.registerDomain(DomainRegistration.builder(
+                DomainId.of("infra"), infraResult)
+                .provides(infraProvides)
+                .build());
+        }
 
-        // Deployment domain: provides casehub_application, requires container:database
+        // 2. Register deployment domain — requires = whatever infra provides
+        CompilationResult deployResult = compileTopology();
         engine.registerDomain(DomainRegistration.builder(
-            DomainId.of("deployment"), deploymentCompilationResult)
+            DomainId.of("deployment"), deployResult)
             .provides(Set.of(NodeType.of("casehub_application")))
-            .requires(Set.of(NodeType.of("container:database")))
+            .requires(infraProvides)  // derived from infra, empty for local-dev
             .build());
     }
 }
 ```
 
-This ensures `TransitionPlanner` provisions infra nodes before deployment nodes. The registrar must fire before the first reconciliation cycle — `@Observes StartupEvent` guarantees this.
+**Profile-dependent behavior:**
+
+| Profile | Infra domain | Deployment domain requires |
+|---------|-------------|---------------------------|
+| `local-dev` | Not registered (H2 is Quarkus config, not a topology node) | `{}` (empty — no infra dependency) |
+| `local-distributed` | Registered with provides derived from `casehub-infra-local-distributed.yaml` (e.g. `{container:database, network, volume}`) | Same set — derived from infra provides |
+| `enterprise` | Registered with provides derived from `casehub-infra-enterprise.yaml` (e.g. `{database_cluster, k8s_namespace}`) | Same set — derived from infra provides |
+
+**Infra module selection:** The `BootstrapDomainRegistrar` loads the matching module from the classpath by naming convention: `casehub-infra-{profile}.yaml`. The `YamlDesiredStateProcessor` build-time discovery places modules in `META-INF/desiredstate/modules/` as importable resources — the registrar loads the specific one at runtime, compiles it via the appropriate `GoalCompiler` (container or infra domain), and registers the compiled graph as a domain. This is a new runtime capability: profile-aware module selection.
+
+This ensures `TransitionPlanner` provisions infra nodes before deployment nodes. The registrar must fire before the first reconciliation cycle — `@Observes StartupEvent` guarantees this. For `local-dev`, `validateUnsatisfiedRequires()` succeeds because the deployment domain's requires set is empty.
 
 ### Platform Services as CaseHub Applications
 
@@ -149,6 +184,15 @@ The bootstrap topology uses the existing reconciliation loop — no new adapter 
 | Qhorus, Eidos, Engine (in-process) | CDI bean availability check | `DeploymentActualStateAdapter` via `CaseHubAppDriftChecker` |
 
 **Drift detection:** standard reconciliation behavior. The `ActualStateAdapter` continues monitoring provisioned services. If a service goes down, the adapter reports ABSENT/DRIFTED and `TransitionPlanner` plans corrective action per the existing reconciliation protocol.
+
+**`existing:` field — use external service semantics:** When a node's spec includes `existing: <url>`, it declares that an external instance of this service exists at the given URL. Operational semantics:
+
+1. **Probe, don't provision:** The `DeploymentActualStateAdapter` probes the URL (HTTP health endpoint for applications, JDBC connection for databases) instead of querying the `ApplicationDeploymentTarget`. If reachable → `NodeStatus.PRESENT`. The `TransitionPlanner` sees PRESENT and skips provisioning.
+2. **Provisioning is suppressed:** The `CaseHubAppProvisionHandler` checks for the `existing` field on `DeploymentApplicationNodeSpec`. When set, `provision()` returns `ProvisionResult.Success()` immediately without calling `ApplicationDeploymentTarget.deploy()`. The node is managed by monitoring only, not by the deployment lifecycle.
+3. **Unreachable existing → FAULT, not PROVISION:** If the URL becomes unreachable, the adapter reports `NodeStatus.ABSENT`. But unlike a self-provisioned node, the system does NOT attempt to provision a replacement — the operator declared this service is externally managed. Instead, `FaultPolicy` handles it: the deployment domain's `ThresholdFaultPolicy` emits a fault event for human attention. The `TransitionPlanner` skips provision for nodes marked `existing`.
+4. **Interaction with `deploymentTarget`:** `deploymentTarget` is ignored when `existing` is set — no deployment occurs.
+
+The `existing` field is extracted from the spec map by `DeploymentNodeSpecFactoryProvider` and stored on `DeploymentApplicationNodeSpec(CaseHubApplicationSpec spec, String deploymentTargetId, String existingUrl)`. The adapter reads `existingUrl` to determine its probing behavior.
 
 ### ApplicationDeploymentTarget Implementations
 
@@ -329,11 +373,11 @@ Note: `existing` and `deploymentTarget` live inside the `spec:` block, following
 
 | Module | Changes |
 |--------|---------|
-| `api/` | `ApplicationDeploymentTarget` extended with `default String targetId()` method. `DeploymentApplicationNodeSpec` wrapper record (mirrors `InfraDesiredNodeSpec`). No changes to existing `NoOpDeploymentTarget` (inherits default). |
+| `api/` | `ApplicationDeploymentTarget` extended with `default String targetId()` method. `DeploymentApplicationNodeSpec(CaseHubApplicationSpec, String deploymentTargetId, String existingUrl)` wrapper record (mirrors `InfraDesiredNodeSpec`). No changes to existing `NoOpDeploymentTarget` (inherits default). |
 | `deployment/` | `DeploymentNodeSpecFactoryProvider` — registers `casehub_application` with `NodeSpecFactory` SPI, extracts `deploymentTarget`/`existing` from spec map (follows `InfraWrappingFactory` pattern). `InProcessDeploymentTarget`, `PodmanDeploymentTarget` implementations. `CaseHubAppProvisionHandler` updated to inject `Instance<ApplicationDeploymentTarget>` and resolve by `targetId()`. |
 | `container/` | No changes — existing `PodmanNodeProvisioner` handles `DatabaseContainerSpec` |
 | `infra/` | No changes — existing `InfraNodeProvisioner` handles `DatabaseClusterSpec` |
-| `service/` | `BootstrapDomainRegistrar` — wires `CrossDomainCompositionEngine` with domain registrations (container→deployment ordering) at startup. Bootstrap phase coordinator, self-maintenance monitor. |
+| `service/` | `BootstrapDomainRegistrar` — profile-aware: reads `casehub.ops.deployment-profile`, loads and compiles the matching infra module from classpath, derives `provides`/`requires` from compiled graphs, wires `CrossDomainCompositionEngine` at startup. Skips infra registration for `local-dev`. Bootstrap phase coordinator, self-maintenance monitor. |
 | `app/` | `KubernetesDeploymentTarget`, deployment profile configuration, topology YAML classpath resources |
 | `testing/` | `StubDeploymentTarget` unchanged (inherits default `targetId()`). Test fixtures for deployment target stubs across all three profiles. |
 
