@@ -2,7 +2,7 @@
 
 ## State
 branch: issue-117-deployment-profiles-bootstrap
-state: closing:verified
+state: closing:promoted
 project-sha: 
 date: 
 issue-repo: casehubio/casehub-ops
