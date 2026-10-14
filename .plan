@@ -1,16 +1,30 @@
-# Work Plan — issue-122-audit-fixes-83
+# Work Plan — issue-117-deployment-profiles-bootstrap
 
 ## State
-branch: issue-122-audit-fixes-83
-state: closing:stamped
+branch: issue-117-deployment-profiles-bootstrap
+state: closing:promoted
 project-sha: 
 date: 
 issue-repo: casehubio/casehub-ops
-covers: 122
+covers: 117
 design-repo: 
 design-section-hashes: 
 flyway-next-v: 
 
 evidence-era: true
 ## Queue
-- [ ] casehubio/casehub-ops#122 — Issue #122 ← active
+- [ ] casehubio/casehub-ops#117 — Issue #117 ← active
+  - [x] Batch 1: Multi-Target Foundation
+    - [x] Task 1: DeploymentApplicationNodeSpec + targetId
+    - [x] Task 2: DeploymentNodeSpecFactoryProvider
+    - [x] Task 3: Update provisioner for multi-target
+  - [x] Batch 2: Deployment Targets
+    - [x] Task 4: InProcessDeploymentTarget
+    - [x] Task 5: PodmanDeploymentTarget
+  - [x] Batch 3: Topology + Bootstrap
+    - [x] Task 6: Topology YAML + config
+    - [x] Task 7: BootstrapDomainRegistrar
+  - [x] Batch 4: Bootstrap + Self-Maint
+    - [x] Task 8: BootstrapPhaseCoordinator
+    - [x] Task 9: SelfMaintenanceMonitor
+    - [x] Task 10: KubernetesDeploymentTarget stub
