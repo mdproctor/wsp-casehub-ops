@@ -1,0 +1,65 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 700 420" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif">
+
+  <!-- Title -->
+  <text x="350" y="30" text-anchor="middle" font-size="13" fill="#94a3b8">from hello world to production fleet — each level adds one capability</text>
+
+  <!-- Level bars — stacked bottom to top -->
+
+  <!-- Level 01 — foundation -->
+  <rect x="60" y="350" width="580" height="36" rx="6" fill="#0284c7"/>
+  <text x="80" y="374" font-size="13" font-weight="600" fill="white">01  eidos + engine + LLM via claudony</text>
+  <text x="560" y="374" text-anchor="end" font-size="11" fill="#bae6fd">core platform</text>
+
+  <!-- Level 02 -->
+  <rect x="60" y="310" width="580" height="36" rx="6" fill="#0369a1"/>
+  <text x="80" y="334" font-size="13" font-weight="600" fill="white">02  + ledger + work</text>
+  <text x="560" y="334" text-anchor="end" font-size="11" fill="#bae6fd">accountability</text>
+
+  <!-- Level 03 -->
+  <rect x="60" y="270" width="580" height="36" rx="6" fill="#075985"/>
+  <text x="80" y="294" font-size="13" font-weight="600" fill="white">03  + qhorus</text>
+  <text x="560" y="294" text-anchor="end" font-size="11" fill="#bae6fd">case management</text>
+
+  <!-- Level 04 -->
+  <rect x="60" y="230" width="580" height="36" rx="6" fill="#d97706"/>
+  <text x="80" y="254" font-size="13" font-weight="600" fill="white">04  fleet (3 LLMs)</text>
+  <text x="560" y="254" text-anchor="end" font-size="11" fill="#fef3c7">scaling</text>
+
+  <!-- Level 05 -->
+  <rect x="60" y="190" width="580" height="36" rx="6" fill="#b45309"/>
+  <text x="80" y="214" font-size="13" font-weight="600" fill="white">05  config change</text>
+  <text x="560" y="214" text-anchor="end" font-size="11" fill="#fef3c7">drift reconciliation</text>
+
+  <!-- Level 06 -->
+  <rect x="60" y="150" width="580" height="36" rx="6" fill="#92400e"/>
+  <text x="80" y="174" font-size="13" font-weight="600" fill="white">06  suspend / resume</text>
+  <text x="560" y="174" text-anchor="end" font-size="11" fill="#fef3c7">lifecycle</text>
+
+  <!-- Level 07 -->
+  <rect x="60" y="110" width="580" height="36" rx="6" fill="#7c3aed"/>
+  <text x="80" y="134" font-size="13" font-weight="600" fill="white">07  add / remove apps</text>
+  <text x="560" y="134" text-anchor="end" font-size="11" fill="#ede9fe">topology mutations</text>
+
+  <!-- Level 08 -->
+  <rect x="60" y="70" width="580" height="36" rx="6" fill="#6d28d9"/>
+  <text x="80" y="94" font-size="13" font-weight="600" fill="white">08  + RAS</text>
+  <text x="560" y="94" text-anchor="end" font-size="11" fill="#ede9fe">fleet monitoring</text>
+
+  <!-- Level 09 -->
+  <rect x="60" y="42" width="580" height="24" rx="6" fill="#5b21b6"/>
+  <text x="80" y="59" font-size="11" font-weight="600" fill="white">09  + chat UI</text>
+  <text x="560" y="59" text-anchor="end" font-size="10" fill="#ede9fe">conversation view</text>
+
+  <!-- Bracket annotations -->
+  <line x1="648" y1="350" x2="648" y2="276" stroke="#0284c7" stroke-width="2"/>
+  <line x1="648" y1="313" x2="660" y2="313" stroke="#0284c7" stroke-width="2"/>
+  <text x="666" y="318" font-size="10" fill="#0284c7" font-weight="500">platform</text>
+
+  <line x1="648" y1="270" x2="648" y2="156" stroke="#d97706" stroke-width="2"/>
+  <line x1="648" y1="213" x2="660" y2="213" stroke="#d97706" stroke-width="2"/>
+  <text x="666" y="218" font-size="10" fill="#d97706" font-weight="500">operations</text>
+
+  <line x1="648" y1="146" x2="648" y2="46" stroke="#7c3aed" stroke-width="2"/>
+  <line x1="648" y1="96" x2="660" y2="96" stroke="#7c3aed" stroke-width="2"/>
+  <text x="666" y="101" font-size="10" fill="#7c3aed" font-weight="500">visibility</text>
+</svg>
