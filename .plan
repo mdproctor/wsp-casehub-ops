@@ -17,7 +17,7 @@ flyway-next-v:
     - [x] Task 1: ServiceProcess locate start health-poll stop
   - [x] Batch 2: Annotations
     - [x] Task 2: Annotations LlmMode LlmAvailable
-  - [ ] Batch 3: Extension
-    - [ ] Task 3: ServiceClusterExtension PostgreSQL ports injection
+  - [x] Batch 3: Extension
+    - [x] Task 3: ServiceClusterExtension PostgreSQL ports injection
   - [ ] Batch 4: Proof
     - [ ] Task 4: Hello-LLM integration test
