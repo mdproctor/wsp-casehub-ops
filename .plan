@@ -19,5 +19,5 @@ flyway-next-v:
     - [x] Task 2: Annotations LlmMode LlmAvailable
   - [x] Batch 3: Extension
     - [x] Task 3: ServiceClusterExtension PostgreSQL ports injection
-  - [ ] Batch 4: Proof
-    - [ ] Task 4: Hello-LLM integration test
+  - [x] Batch 4: Proof
+    - [x] Task 4: Hello-LLM integration test
