@@ -13,8 +13,8 @@ flyway-next-v:
 
 ## Queue
 - [ ] casehubio/casehub-ops#139 — Issue #139 ← active
-  - [ ] Batch 1: ServiceProcess
-    - [ ] Task 1: ServiceProcess locate start health-poll stop
+  - [x] Batch 1: ServiceProcess
+    - [x] Task 1: ServiceProcess locate start health-poll stop
   - [ ] Batch 2: Annotations
     - [ ] Task 2: Annotations LlmMode LlmAvailable
   - [ ] Batch 3: Extension
