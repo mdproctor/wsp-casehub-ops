@@ -15,8 +15,8 @@ flyway-next-v:
 - [ ] casehubio/casehub-ops#139 — Issue #139 ← active
   - [x] Batch 1: ServiceProcess
     - [x] Task 1: ServiceProcess locate start health-poll stop
-  - [ ] Batch 2: Annotations
-    - [ ] Task 2: Annotations LlmMode LlmAvailable
+  - [x] Batch 2: Annotations
+    - [x] Task 2: Annotations LlmMode LlmAvailable
   - [ ] Batch 3: Extension
     - [ ] Task 3: ServiceClusterExtension PostgreSQL ports injection
   - [ ] Batch 4: Proof
