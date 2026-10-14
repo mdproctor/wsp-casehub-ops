@@ -11,7 +11,7 @@ Level 01 (#129) built a data-driven topology test framework that compiles YAML �
 
 ## Solution
 
-Add integration test infrastructure to the `topology-tests` module that starts real CaseHub service instances as separate JVM processes, manages their lifecycle via a JUnit 5 extension, and supports two modes: full (real LLM) and simulation (platform SimulatedAgentBackend with canned corpus responses).
+Add integration test infrastructure to the `topology-tests` module that starts real CaseHub service instances as separate JVM processes and manages their lifecycle via a JUnit 5 extension. The proof-of-concept validates that the infrastructure can start claudony and ops-app, and that the deployment API works against a real claudony instance. LLM simulation and end-to-end app deployment are deferred until eidos/engine have app modules.
 
 ### Deployability Constraint
 
@@ -42,39 +42,67 @@ Jars are located by convention — no build step in tests:
 - **Repo mapping:** annotation declares repo path (e.g., `claudony/app` for claudony, `ops/app` for casehub-ops-app). Future: `eidos/app`, `engine/app` once those repos add app modules.
 - **Missing jar:** `IllegalStateException` with actionable message naming the missing path and the build command to produce it.
 
+### Database Provisioning
+
+Claudony requires PostgreSQL (`quarkus.datasource.qhorus.db-kind=postgresql`, reactive). Quarkus Dev Services auto-start a container in dev/test profiles but do NOT activate when running a pre-built jar via ProcessBuilder.
+
+**Solution:** Testcontainers starts a PostgreSQL container in the test JVM. The container's JDBC URL is passed to claudony via system property overrides:
+- `-Dquarkus.datasource.qhorus.reactive.url=postgresql://<host>:<port>/claudony`
+- `-Dquarkus.datasource.qhorus.jdbc.url=jdbc:postgresql://<host>:<port>/claudony`
+
+Ops-app uses H2 in test profile (`%test.quarkus.datasource.db-kind=h2`), so no PostgreSQL needed for it.
+
+The `ServiceClusterExtension` manages the Testcontainers PostgreSQL lifecycle — started in `beforeAll`, shared across all services that need it, stopped in `afterAll`.
+
+### Authentication
+
+Claudony's REST API requires authentication (`/api/*` → `authenticated` policy). The test profile provides a fixed fleet key (`test-fleet-key-do-not-use-in-prod`).
+
+**Solution:** Start claudony with `-Dquarkus.profile=test`. `HttpClaudonyFleetClient` needs a fleet-key header added, or the extension overrides the auth policy: `-Dquarkus.http.auth.permission.protected.policy=permit`. The latter is simpler for testing — no client changes needed.
+
 ### Process Lifecycle
+
+**Port allocation:** Dynamic ports via `ServerSocket(0)` — find a free port, close the socket, pass the port to the service via `-Dquarkus.http.port=<port>`. Avoids hardcoded port collisions (R1-05).
 
 **Startup:**
 1. Extension reads `@ServiceCluster`, resolves jar paths
-2. Starts services in declared order (first → last)
-3. Each ServiceProcess launches `java -jar quarkus-run.jar` with system properties:
-   - `-Dquarkus.http.port=<assigned>`
-   - `-Dcasehub.simulation.profile=mock-llm` (when simulation mode)
+2. Starts Testcontainers PostgreSQL (if any service needs it)
+3. Allocates dynamic ports for each service
+4. Starts services in declared order (first → last)
+5. Each ServiceProcess launches `java -jar quarkus-run.jar` with system properties:
+   - `-Dquarkus.http.port=<dynamic>`
+   - `-Dquarkus.profile=test` (activates test-profile config: H2 for ops-app, test fleet key for claudony)
+   - Database URL overrides (pointing to Testcontainers PostgreSQL)
+   - `-Dquarkus.http.auth.permission.protected.policy=permit` (disable auth for testing)
    - Any per-service config overrides from the annotation
-4. Health polling: `GET /q/health/ready` every 500ms, 60s timeout
-5. On failure: stderr/stdout included in test failure message
+6. Health polling: `GET /q/health/ready` every 500ms, 60s timeout
+7. On failure: stderr/stdout included in test failure message
 
 **Shutdown:**
 - `@AfterAll`: SIGTERM in reverse startup order
 - 10s grace period, then `destroyForcibly()`
 - Process output captured to `target/service-logs/<service-name>.log`
+- Testcontainers PostgreSQL stopped
 
 **Scope:** per test class, not per method.
 
-### LLM Mode Detection
+### LLM Mode Detection (deferred)
 
-1. Check `System.getenv("ANTHROPIC_API_KEY")`
-2. Present → `LlmMode.FULL` — services start normally
-3. Absent → `LlmMode.SIMULATION` — services start with simulation profile
+The proof-of-concept scope (claudony + ops-app) does not involve LLM calls — those happen inside the deployed apps (eidos/engine/my-llm), which are not yet deployable. LLM mode detection and simulation activation are deferred until eidos/engine have app modules.
 
-Future: Ollama detection as a third tier (local models for CI). For now, API key presence is the only signal.
+The infrastructure includes `LlmMode` enum and `@LlmAvailable` annotation as extension points — they're wired but not exercised until later levels.
 
-### Simulation Corpus
+**Future mode detection:**
+1. Check `System.getenv("ANTHROPIC_API_KEY")` → `LlmMode.FULL`
+2. Absent → `LlmMode.SIMULATION`
+3. Later: Ollama detection as a third tier for CI
 
-- Canned responses as JSON files in `topology-tests/src/test/resources/simulation/corpora/`
-- Each file maps to a test scenario (e.g., `hello-llm-corpus.json`)
-- Simulation profile configures `SimulatedAgentBackend` (from `platform/agent-simulation-core`) with a `sequential` strategy returning corpus entries in order
-- `LlmCorpusPopulator` (from `platform/simulation-testing`) available for recording real interactions to replay later
+**Future simulation mechanism:**
+The platform provides `SimulatedAgentBackend` and `SimulationRuntime`, but activating them inside service JVMs requires either:
+- A runtime-switchable `AgentBackend` factory (config property selects implementation)
+- Or `@LookupIfProperty`-annotated CDI alternatives in the platform
+
+This is a platform-level change and will be designed when eidos/engine app modules are created. The `SimulatedAgentBackend` → `Simulation.forTest()` → corpus seed pattern is validated by existing platform tests (`ExampleSimulationTest`).
 
 ### Test Gating
 
@@ -88,8 +116,8 @@ Future: Ollama detection as a third tier (local models for CI). For now, API key
 ```java
 @Tag("integration-live")
 @ServiceCluster(services = {
-    @Service(name = "claudony", repo = "claudony/app", port = 17700),
-    @Service(name = "ops-app", repo = "ops/app", port = 17701)
+    @Service(name = "claudony", repo = "claudony/app"),
+    @Service(name = "ops-app", repo = "ops/app")
 })
 class HelloLlmIntegrationTest extends TopologyTestBase {
 
@@ -100,7 +128,9 @@ class HelloLlmIntegrationTest extends TopologyTestBase {
     static String opsAppUrl;
 
     @Test
-    void deploysAllServicesViaClaudony() throws IOException {
+    void registersAppsViaRealClaudony() throws IOException {
+        // Proves: ServiceCluster starts real processes, ClaudonyDeploymentTarget
+        // works against a real claudony instance (not WireMock)
         DesiredStateGraph graph = compileSingleGraph(
             "topologies/deployment/01-hello-llm.yaml", DEPLOYMENT_REGISTRY);
 
@@ -115,21 +145,33 @@ class HelloLlmIntegrationTest extends TopologyTestBase {
                     spec.config(), Map.of()));
             assertThat(result).isInstanceOf(DeployResult.Success.class);
         }
-    }
 
-    @Test
-    @LlmAvailable
-    void fullModeExecutesLlmTask() {
-        // Only runs when ANTHROPIC_API_KEY is set
+        // Verify apps are registered in claudony's registry
+        for (DesiredNode node : graph.nodes().values()) {
+            CaseHubApplicationSpec spec = extractAppSpec(node);
+            NodeStatus status = target.status(spec.applicationId());
+            assertThat(status).isNotEqualTo(NodeStatus.ABSENT);
+        }
     }
 }
 ```
 
+**What the proof-of-concept validates:**
+1. `ServiceProcess` can locate, start, and manage real Quarkus JVM processes
+2. `ServiceClusterExtension` orchestrates multiple services with database provisioning (Testcontainers PostgreSQL), dynamic port allocation, health-check polling, and teardown
+3. `ClaudonyDeploymentTarget` can register apps against a real claudony instance (not WireMock), verifying the full REST call path including serialization, HTTP transport, and server-side processing
+4. The `integration-live` tag/profile gating works correctly
+
+**What it does NOT validate (deferred):**
+- End-to-end deployment of running eidos/engine/my-llm instances (requires app modules)
+- LLM simulation via SimulatedAgentBackend (requires services that call the LLM to be running)
+- Real LLM task execution (requires both of the above)
+
 **Annotations:**
 - `@ServiceCluster(services = {...})` — declares which services to start
-- `@Service(name, repo, port)` — individual service definition
+- `@Service(name, repo)` — individual service definition (ports allocated dynamically)
 - `@ServiceEndpoint("name")` — injects base URL for a named service (static field injection)
-- `@LlmAvailable` — gates tests requiring a real LLM
+- `@LlmAvailable` — gates tests requiring a real LLM (wired but not exercised in proof-of-concept)
 
 ### Maven Configuration
 
@@ -160,8 +202,12 @@ Default surefire exclusion updated to include `integration-live`:
 ### New Dependencies
 
 topology-tests pom.xml additions:
-- `casehub-platform-simulation-api` (test scope) — SimulationCorpus, CorpusSeed
-- `casehub-platform-agent-simulation-core` (test scope) — SimulatedAgentBackend
+- `org.testcontainers:postgresql` (test scope) — PostgreSQL container for claudony
+- `org.testcontainers:junit-jupiter` (test scope) — Testcontainers JUnit 5 integration
+
+Deferred dependencies (needed when simulation is activated):
+- `casehub-platform-simulation-api` — SimulationCorpus, CorpusSeed (in service JVMs, not test JVM)
+- `casehub-platform-agent-simulation-core` — SimulatedAgentBackend (in service JVMs, not test JVM)
 
 ## File Inventory
 
@@ -178,20 +224,19 @@ topology-tests pom.xml additions:
 
 All in `topology-tests/src/test/java/io/casehub/ops/topology/integration/`.
 
-Test resources:
-- `simulation/corpora/hello-llm-corpus.json` — canned LLM responses for hello-llm scenario
-
 ## Scope Boundaries
 
 **In scope:**
 - ServiceProcess and ServiceClusterExtension infrastructure
-- LLM mode detection (API key)
-- Simulation corpus for hello-llm scenario
+- Testcontainers PostgreSQL provisioning for claudony
+- Dynamic port allocation
+- Authentication bypass for testing
+- LlmMode enum and @LlmAvailable annotation (wired, not exercised)
 - Maven profile for running integration-live tests
-- One proof-of-concept integration test (hello-llm deployment via claudony + ops-app)
+- One proof-of-concept integration test (app registration via real claudony)
 
 **Out of scope:**
-- Docker/Testcontainers (later issue)
+- LLM simulation activation mechanism — deferred until services that call the LLM are deployable. Requires platform-level CDI changes (runtime-switchable AgentBackend factory or @LookupIfProperty).
 - Kubernetes deployment (later issue, `@KubernetesAvailable` pattern exists)
 - Ollama/local model support (future extension to LlmMode)
 - Per-service composable extensions (can extract from ServiceProcess later)
