@@ -2,7 +2,7 @@
 
 ## State
 branch: issue-139-real-instance-test-infra
-state: closing:pushed
+state: closing:merged
 project-sha: 
 date: 
 issue-repo: casehubio/casehub-ops
