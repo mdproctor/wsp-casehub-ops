@@ -1,0 +1,54 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 740 200" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif">
+  <defs>
+    <marker id="arr" markerWidth="8" markerHeight="6" refX="8" refY="3" orient="auto">
+      <path d="M0,0 L8,3 L0,6" fill="#64748b"/>
+    </marker>
+    <marker id="arr-purple" markerWidth="8" markerHeight="6" refX="8" refY="3" orient="auto">
+      <path d="M0,0 L8,3 L0,6" fill="#7c3aed"/>
+    </marker>
+  </defs>
+
+  <!-- YAML -->
+  <rect x="20" y="60" width="100" height="70" rx="6" fill="#fef3c7" stroke="#d97706" stroke-width="1.5"/>
+  <text x="70" y="92" text-anchor="middle" font-size="13" font-weight="600" fill="#78350f">YAML</text>
+  <text x="70" y="110" text-anchor="middle" font-size="10" fill="#92400e">topology</text>
+
+  <!-- Arrow -->
+  <line x1="122" y1="95" x2="148" y2="95" stroke="#64748b" stroke-width="1.5" marker-end="url(#arr)"/>
+
+  <!-- Compile -->
+  <rect x="150" y="60" width="100" height="70" rx="6" fill="#e0f2fe" stroke="#0284c7" stroke-width="1.5"/>
+  <text x="200" y="92" text-anchor="middle" font-size="13" font-weight="600" fill="#0c4a6e">compile</text>
+  <text x="200" y="110" text-anchor="middle" font-size="10" fill="#64748b">→ graph</text>
+
+  <!-- Arrow -->
+  <line x1="252" y1="95" x2="278" y2="95" stroke="#64748b" stroke-width="1.5" marker-end="url(#arr)"/>
+
+  <!-- Plan -->
+  <rect x="280" y="60" width="100" height="70" rx="6" fill="#f5f3ff" stroke="#7c3aed" stroke-width="1.5"/>
+  <text x="330" y="92" text-anchor="middle" font-size="13" font-weight="600" fill="#4c1d95">plan</text>
+  <text x="330" y="110" text-anchor="middle" font-size="10" fill="#64748b">desired − actual</text>
+
+  <!-- Arrow -->
+  <line x1="382" y1="95" x2="408" y2="95" stroke="#64748b" stroke-width="1.5" marker-end="url(#arr)"/>
+
+  <!-- Provision -->
+  <rect x="410" y="60" width="100" height="70" rx="6" fill="#dcfce7" stroke="#16a34a" stroke-width="1.5"/>
+  <text x="460" y="92" text-anchor="middle" font-size="13" font-weight="600" fill="#14532d">provision</text>
+  <text x="460" y="110" text-anchor="middle" font-size="10" fill="#64748b">via claudony</text>
+
+  <!-- Arrow -->
+  <line x1="512" y1="95" x2="538" y2="95" stroke="#64748b" stroke-width="1.5" marker-end="url(#arr)"/>
+
+  <!-- Verify -->
+  <rect x="540" y="60" width="100" height="70" rx="6" fill="#fce7f3" stroke="#db2777" stroke-width="1.5"/>
+  <text x="590" y="92" text-anchor="middle" font-size="13" font-weight="600" fill="#831843">verify</text>
+  <text x="590" y="110" text-anchor="middle" font-size="10" fill="#64748b">health check</text>
+
+  <!-- Feedback loop arrow -->
+  <path d="M 590 132 L 590 165 Q 590 175 580 175 L 340 175 Q 330 175 330 165 L 330 132" fill="none" stroke="#7c3aed" stroke-width="1.5" stroke-dasharray="5 3" marker-end="url(#arr-purple)"/>
+  <text x="460" y="170" text-anchor="middle" font-size="10" font-weight="500" fill="#7c3aed">drift detected → re-plan</text>
+
+  <!-- Top annotation -->
+  <text x="330" y="40" text-anchor="middle" font-size="12" fill="#94a3b8">the reconciliation pipeline — runs continuously</text>
+</svg>
