@@ -1,0 +1,15 @@
+# Work Plan — issue-130-accountability-ledger-work
+
+## State
+branch: issue-130-accountability-ledger-work
+state: scaffolded
+project-sha: 
+date: 
+issue-repo: casehubio/casehub-ops
+covers: 130
+design-repo: 
+design-section-hashes: 
+flyway-next-v: 
+
+## Queue
+- [ ] casehubio/casehub-ops#130 — Issue #130 ← active
