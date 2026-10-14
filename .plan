@@ -13,3 +13,11 @@ flyway-next-v:
 
 ## Queue
 - [ ] casehubio/casehub-ops#139 — Issue #139 ← active
+  - [ ] Batch 1: ServiceProcess
+    - [ ] Task 1: ServiceProcess locate start health-poll stop
+  - [ ] Batch 2: Annotations
+    - [ ] Task 2: Annotations LlmMode LlmAvailable
+  - [ ] Batch 3: Extension
+    - [ ] Task 3: ServiceClusterExtension PostgreSQL ports injection
+  - [ ] Batch 4: Proof
+    - [ ] Task 4: Hello-LLM integration test
