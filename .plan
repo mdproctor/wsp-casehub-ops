@@ -2,7 +2,7 @@
 
 ## State
 branch: issue-127-claudony-desiredstate-integration
-state: active
+state: closing:review
 project-sha: 
 date: 
 issue-repo: casehubio/casehub-ops
@@ -11,12 +11,7 @@ design-repo:
 design-section-hashes: 
 flyway-next-v: 
 
+evidence-era: true
 ## Queue
-- [ ] casehubio/casehub-ops#127 — Issue #127 ← active
-  - [x] Batch 1: casehubio/casehub-ops#127
-    - [x] Task 1: ClaudonyDeploymentTarget + FleetClient + DTOs
-    - [x] Task 2: Extend ApplicationDeploymentTarget with suspend/resume
-    - [x] Task 3: Delegate suspend/resume in DeploymentNodeProvisioner
-  - [x] Batch 2: casehubio/casehub-ops#128
-    - [x] Task 4: Multi-target drift checker resolution
-- [ ] casehubio/casehub-ops#128 — Claudony ActualStateAdapter
+- [x] casehubio/casehub-ops#127 — Issue #127
+- [x] casehubio/casehub-ops#128 — Claudony ActualStateAdapter
