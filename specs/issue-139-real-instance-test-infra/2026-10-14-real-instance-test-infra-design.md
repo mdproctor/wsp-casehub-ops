@@ -11,7 +11,15 @@ Level 01 (#129) built a data-driven topology test framework that compiles YAML �
 
 ## Solution
 
-Add integration test infrastructure to the `topology-tests` module that starts real claudony, eidos, and engine instances as separate JVM processes, manages their lifecycle via a JUnit 5 extension, and supports two modes: full (real LLM) and simulation (platform SimulatedAgentBackend with canned corpus responses).
+Add integration test infrastructure to the `topology-tests` module that starts real CaseHub service instances as separate JVM processes, manages their lifecycle via a JUnit 5 extension, and supports two modes: full (real LLM) and simulation (platform SimulatedAgentBackend with canned corpus responses).
+
+### Deployability Constraint
+
+Eidos and engine are libraries/Quarkus extensions — they have no standalone `app/` modules and cannot be started as separate processes today. Only claudony (which has `claudony/app/`) and `casehub-ops-app` are deployable Quarkus apps.
+
+**Recommendation for eidos/engine:** add `app/` submodules to each repo (following claudony's pattern), rather than using scaffold as an app-wrapper. Scaffold is a leaf in the dependency graph (depends on engine) — using it to wrap engine would create a circular build dependency. App folders keep the build DAG clean and the packaging collocated with the library.
+
+**For this issue:** scope to claudony + casehub-ops-app (both deployable today). Eidos/engine app modules are a prerequisite for later levels (#130+) and should be filed as a separate issue.
 
 ## Architecture
 
@@ -31,7 +39,7 @@ Jars are located by convention — no build step in tests:
 
 - **Family root:** `../../` from the ops project root (the casehub family directory). Overridable via `casehub.family.root` system property.
 - **Jar path pattern:** `<family-root>/<repo>/target/quarkus-app/quarkus-run.jar`
-- **Repo mapping:** annotation declares repo path (e.g., `claudony/app`, `eidos/app`, `engine/app`)
+- **Repo mapping:** annotation declares repo path (e.g., `claudony/app` for claudony, `ops/app` for casehub-ops-app). Future: `eidos/app`, `engine/app` once those repos add app modules.
 - **Missing jar:** `IllegalStateException` with actionable message naming the missing path and the build command to produce it.
 
 ### Process Lifecycle
@@ -81,16 +89,18 @@ Future: Ollama detection as a third tier (local models for CI). For now, API key
 @Tag("integration-live")
 @ServiceCluster(services = {
     @Service(name = "claudony", repo = "claudony/app", port = 17700),
-    @Service(name = "eidos", repo = "eidos/app", port = 17701),
-    @Service(name = "engine", repo = "engine/app", port = 17702)
+    @Service(name = "ops-app", repo = "ops/app", port = 17701)
 })
 class HelloLlmIntegrationTest extends TopologyTestBase {
 
     @ServiceEndpoint("claudony")
     static String claudonyUrl;
 
+    @ServiceEndpoint("ops-app")
+    static String opsAppUrl;
+
     @Test
-    void deploysAllServicesAndProcessesRequest() throws IOException {
+    void deploysAllServicesViaClaudony() throws IOException {
         DesiredStateGraph graph = compileSingleGraph(
             "topologies/deployment/01-hello-llm.yaml", DEPLOYMENT_REGISTRY);
 
@@ -178,7 +188,7 @@ Test resources:
 - LLM mode detection (API key)
 - Simulation corpus for hello-llm scenario
 - Maven profile for running integration-live tests
-- One proof-of-concept integration test (hello-llm deployment against real claudony)
+- One proof-of-concept integration test (hello-llm deployment via claudony + ops-app)
 
 **Out of scope:**
 - Docker/Testcontainers (later issue)
@@ -186,6 +196,7 @@ Test resources:
 - Ollama/local model support (future extension to LlmMode)
 - Per-service composable extensions (can extract from ServiceProcess later)
 - CI pipeline configuration for integration-live profile
+- Eidos/engine app modules — separate issue, prerequisite for later levels (#130+). Recommendation: `app/` submodules in each repo (not scaffold), following claudony's pattern. Scaffold is a leaf in the dependency graph and cannot wrap upstream libraries without circular build dependencies.
 
 ## References
 

@@ -81,3 +81,16 @@
 **Sources:** @KubernetesAvailable pattern, DeploymentTargetIntegrationTest WireMock lifecycle
 **Exploration:** quick
 **Status:** captured
+
+## D8: Deployability — eidos/engine app modules
+
+**Choice:** Scope #139 to claudony + casehub-ops-app only. Eidos/engine app modules as a separate prerequisite issue.
+**Alternatives:**
+- Include eidos/engine app module creation in this issue — expands scope into cross-repo work
+- Use scaffold as app wrapper — circular dependency (scaffold is a leaf, depends on engine)
+**Rationale:** Eidos and engine are libraries with no standalone app modules. Only claudony and ops-app are deployable today. Creating app modules is cross-repo work that should be tracked separately. The app/ submodule pattern (following claudony) is recommended over scaffold — scaffold is a product, not an app-wrapper mechanism, and its position as a dependency leaf creates build ordering issues.
+**Trade-offs:** Later levels (#130+) that need individual eidos/engine deployment are blocked until the app modules exist
+**Depends on:** D1 (separate JVM processes)
+**Sources:** eidos repo structure (no app/ module), engine repo structure (no app/ module), claudony/app/ (proven pattern), scaffold CLAUDE.md (leaf dependency position)
+**Exploration:** quick
+**Status:** captured
