@@ -2,7 +2,7 @@
 
 ## State
 branch: issue-117-deployment-profiles-bootstrap
-state: scaffolded
+state: active
 project-sha: 
 date: 
 issue-repo: casehubio/casehub-ops
@@ -13,3 +13,17 @@ flyway-next-v:
 
 ## Queue
 - [ ] casehubio/casehub-ops#117 — Issue #117 ← active
+  - [x] Batch 1: Multi-Target Foundation
+    - [x] Task 1: DeploymentApplicationNodeSpec + targetId
+    - [x] Task 2: DeploymentNodeSpecFactoryProvider
+    - [x] Task 3: Update provisioner for multi-target
+  - [x] Batch 2: Deployment Targets
+    - [x] Task 4: InProcessDeploymentTarget
+    - [x] Task 5: PodmanDeploymentTarget
+  - [x] Batch 3: Topology + Bootstrap
+    - [x] Task 6: Topology YAML + config
+    - [x] Task 7: BootstrapDomainRegistrar
+  - [x] Batch 4: Bootstrap + Self-Maint
+    - [x] Task 8: BootstrapPhaseCoordinator
+    - [x] Task 9: SelfMaintenanceMonitor
+    - [x] Task 10: KubernetesDeploymentTarget stub
