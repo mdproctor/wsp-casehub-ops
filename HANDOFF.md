@@ -1,35 +1,50 @@
-# Handover — issue-118-extract-ops-service-module
+# Handover — deployment topology integration tests
 
-**Branch:** `issue-118-extract-ops-service-module`
-**Issue:** casehubio/casehub-ops#118
-**Status:** Spec complete, needs writing-plans → implementation
+**Branch:** `issue-129-hello-llm-deployment-topology` (closed, landed on main)
+**Issue:** casehubio/casehub-ops#129 (closed)
+**Status:** Level 01 complete. Ready for level 02.
 
 ## What happened
 
-Delivered #116 (PoolNodeSpec — 7th deployment node type). Full brainstorm → implement → work-end cycle. 226 deployment tests green, merged to main, pushed to both remotes.
+Designed and implemented a data-driven deployment topology integration test suite in `topology-tests`. The suite validates deploying CaseHub apps via claudony through the full YAML → compile → reconcile → provision pipeline.
 
-Architecture discussion about deployment profiles, bootstrap model, and qhorus mesh deployment led to three new issues: #117 (deployment profiles), #118 (extract ops/service), #119 (GraphQL generation). Updated #118 scope with deployment profile context.
+**Key design decisions:**
+- The minimum honest CaseHub hello world needs five services: manifest + eidos + engine + blocks + LLM — all deployed via claudony. Anything less and something can't function.
+- Claudony is the deployment target from day one. Without it, desiredstate adds nothing over `docker run`.
+- Tests are tutorial-style: each YAML has header comments explaining what it teaches. `INDEX.md` provides the reading order.
+- Nine levels planned, each adding one platform capability. Iterative — reassess after each level.
 
-Brainstormed and wrote spec for #118: extract all Java source from ops/app into ops/service library module. Package rename `io.casehub.ops.app` → `io.casehub.ops.service`. ops/app becomes a thin Quarkus shell.
+**What was built (level 01):**
+- `01-hello-llm.yaml` — three `casehub_application` nodes (eidos → engine → my-llm) with dependency ordering
+- `DeploymentCompilationTest` — 5 tests (graph structure, types, deps)
+- `DeploymentReconciliationTest` — 5 tests (ordering, execution, idempotency)
+- `DeploymentTargetIntegrationTest` — 2 tests (WireMock claudony fleet API)
+- `ClaudonyWireMockSupport` — reusable WireMock stubs for claudony API
+- `TopologyTestBase` extended with `buildTypeRegistryFrom()` and `compileSingleGraph(path, registry)` overloads
+- Blog post: "The Minimum Honest LLM Deployment" with 3 SVG diagrams
 
-## Decisions
+**Pre-existing issues fixed along the way:**
+- `TransitionPlan` API: `additions()` → `flatAdditions()` across 8 test files
+- `SimpleTransitionExecutor`: now wraps `NodeStepExecutor`
+- `YamlGraphRecorder`: dropped factory provider parameters
+- `YamlModule`/`YamlModuleFile`: package migration to `yaml.core.module`
 
-- Everything moves to ops/service (APIs, entities, services, K8s, SPI stubs, case descriptors, migrations)
-- ops/app retains only pom.xml + application.properties
-- Flyway migrations follow entities into ops/service
+**Pre-existing issues NOT fixed (infra tests still broken):**
+- `K8sNamespaceSpec` cannot be cast to `NodeSpec` — version mismatch between infra module and desiredstate API
+- Module YAML `ParameterType` enum case mismatch (`string` vs `STRING`)
 
-## Next action
+## Next work
 
-Run `work continue` → invoke writing-plans on the spec, then execute the extraction.
+**Level 02: + ledger + work** — adds accountability to the hello-llm topology. Each deployment is audited, each task generates work items. This is a separate issue/branch.
 
-## Cross-repo blockers
+The full 9-level progression is in the spec: `/Users/mdproctor/claude/public/casehub-ops/specs/deployment-topology-tests/2026-10-14-deployment-topology-integration-tests-design.md`
 
-- scaffold#53 blocked by this issue (needs ops/service to embed ops)
+**Infra test fixes:** The pre-existing infra topology test failures should be addressed in a separate issue — they're unrelated to deployment topology work but block `mvn test` on the full topology-tests module.
 
-## References
+## Key files
 
-| Artifact | Path |
-|----------|------|
-| Spec | `wksp/specs/issue-118-extract-ops-service-module/2026-10-06-extract-ops-service-design.md` |
-| Decisions | `wksp/specs/issue-118-extract-ops-service-module/decisions.md` |
-| Journal | `wksp/JOURNAL.md` |
+- `topology-tests/src/test/resources/topologies/deployment/01-hello-llm.yaml`
+- `topology-tests/src/test/java/io/casehub/ops/topology/compilation/DeploymentCompilationTest.java`
+- `topology-tests/src/test/java/io/casehub/ops/topology/reconciliation/DeploymentReconciliationTest.java`
+- `topology-tests/src/test/java/io/casehub/ops/topology/deployment/DeploymentTargetIntegrationTest.java`
+- `topology-tests/src/test/java/io/casehub/ops/topology/deployment/ClaudonyWireMockSupport.java`
