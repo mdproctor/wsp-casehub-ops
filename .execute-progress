@@ -1,2 +1,3 @@
 ops:issue-139-real-instance-test-infra=stamped
 casehub-ops:issue-139-real-instance-test-infra=stamped
+default=promoted
