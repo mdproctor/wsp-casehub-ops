@@ -27,11 +27,11 @@ The core principle is **"use existing or deploy if missing"** — this is standa
 
 The deployment profile is a CaseHub-level configuration property, separate from Quarkus profiles (`%dev`, `%test`, `%prod`). Quarkus profiles continue to control framework behavior (H2 vs PostgreSQL datasource, Hibernate schema management). The CaseHub deployment profile controls which `ApplicationDeploymentTarget` is active for platform service provisioning.
 
-Individual nodes can override the default deployment target: `deploymentTarget: podman` in a node's YAML forces Podman deployment even when the profile default is `in-process`.
+Individual nodes can override the default deployment target: `deploymentTarget: podman` inside a node's `spec:` block forces Podman deployment even when the profile default is `in-process`. This follows the same pattern as infra's `backendId` — routing metadata lives inside the spec map and is extracted by the `NodeSpecFactory` before converting to the typed record (see `InfraWrappingFactory`).
 
 ### Profile as a Spectrum
 
-Profiles are not rigid buckets. `local-dev` can range from "everything in-memory in-process" to "some services persistent" to "some services in separate containers." The profile sets the default; per-node overrides provide the spectrum. A developer might run `local-dev` with Qhorus embedded but PostgreSQL in a container — the topology YAML supports this via per-node `deploymentTarget` overrides.
+Profiles are not rigid buckets. `local-dev` can range from "everything in-memory in-process" to "some services persistent" to "some services in separate containers." The profile sets the default; per-node overrides provide the spectrum. A developer might run `local-dev` with Qhorus embedded but PostgreSQL in a container — the topology YAML supports this via per-node `deploymentTarget` overrides inside the `spec:` block.
 
 ## Architecture
 
@@ -41,9 +41,10 @@ The full system topology is declared as standard desiredstate YAML graphs at the
 
 ```
 META-INF/desiredstate/
-  casehub-platform.yaml       # qhorus, eidos, engine (same across all profiles)
-  casehub-apps.yaml            # ops app itself (same across all profiles)
+  casehub-topology.yaml        # all platform services + ops app (same across all profiles)
 ```
+
+All `casehub_application` nodes (Qhorus, Eidos, Engine, ops-app) live in a single topology YAML file. This ensures `dependsOn` references resolve within one `DesiredStateGraph` — cross-file `dependsOn` between separate YAML graphs is not supported without `CrossDomainCompositionEngine` domain registration, and two domains providing the same `NodeType` triggers `validateDuplicateProvides()`.
 
 Infrastructure is profile-specific — different profiles use different infrastructure types (`DatabaseContainerSpec` vs `DatabaseClusterSpec`, `NetworkSpec` vs `K8sNamespaceSpec`). Profile-specific infra is loaded from `META-INF/desiredstate/modules/` and imported by the main topology:
 
@@ -58,7 +59,56 @@ Reusable infrastructure modules (load-balancer, HA, service-mesh) remain at this
 
 **Location:** shipped in the ops app JAR at `META-INF/desiredstate/`. A config property `casehub.ops.topology.path` points to a filesystem directory for installation-specific overrides. Classpath is the default; filesystem takes precedence when specified.
 
-**YAML format:** standard `desiredState:` graph format with `imports:` for reusable module composition. No `provides`/`requires` in YAML — domain dependency ordering is registered at the Java level by each `GoalCompiler` via `DomainRegistration` with `CrossDomainCompositionEngine`.
+**YAML format:** standard `desiredState:` graph format with `imports:` for reusable module composition. No `provides`/`requires` in YAML — domain dependency ordering is registered at the Java level via `DomainRegistration` with `CrossDomainCompositionEngine`.
+
+**YAML processing prerequisite — DeploymentNodeSpecFactoryProvider:** The `desiredState:` YAML format resolves node types via `NodeSpecFactory` implementations registered through `NodeSpecFactoryProvider` SPI. The infra domain has `InfraNodeSpecFactoryProvider`, the container domain has `ContainerNodeSpecFactoryProvider`. The deployment domain currently lacks one — it uses `DeploymentGoalLoader` with its own YAML format.
+
+This spec adds `DeploymentNodeSpecFactoryProvider` in the `deployment/` module, following the established pattern:
+
+```java
+public class DeploymentNodeSpecFactoryProvider implements NodeSpecFactoryProvider {
+    @Override
+    public Map<String, NodeSpecFactory> provide() {
+        ObjectMapper mapper = new ObjectMapper();
+        return Map.of("casehub_application", specMap -> {
+            Map<String, Object> fields = new LinkedHashMap<>(specMap);
+            String deploymentTarget = (String) fields.remove("deploymentTarget");
+            CaseHubApplicationSpec appSpec = mapper.convertValue(fields, CaseHubApplicationSpec.class);
+            return deploymentTarget != null
+                ? new DeploymentApplicationNodeSpec(appSpec, deploymentTarget)
+                : appSpec;
+        });
+    }
+}
+```
+
+When `deploymentTarget` is present in the spec map, the factory wraps the spec in `DeploymentApplicationNodeSpec(CaseHubApplicationSpec spec, String deploymentTargetId)` implementing `NodeSpec` — mirroring the `InfraDesiredNodeSpec(InfraNodeSpec, backendId)` pattern. When absent, the bare `CaseHubApplicationSpec` is returned and the profile default target is used.
+
+**Cross-domain ordering — production DomainRegistration wiring:** The `CrossDomainCompositionEngine` has been tested but not wired in production. This spec adds `BootstrapDomainRegistrar` CDI beans that register domains at startup:
+
+```java
+@ApplicationScoped
+public class BootstrapDomainRegistrar {
+    @Inject CrossDomainCompositionEngine engine;
+
+    void onStartup(@Observes StartupEvent event) {
+        // Container domain: provides container:database, network, volume
+        engine.registerDomain(DomainRegistration.builder(
+            DomainId.of("container"), containerCompilationResult)
+            .provides(Set.of(NodeType.of("container:database"), NodeType.of("network"), NodeType.of("volume")))
+            .build());
+
+        // Deployment domain: provides casehub_application, requires container:database
+        engine.registerDomain(DomainRegistration.builder(
+            DomainId.of("deployment"), deploymentCompilationResult)
+            .provides(Set.of(NodeType.of("casehub_application")))
+            .requires(Set.of(NodeType.of("container:database")))
+            .build());
+    }
+}
+```
+
+This ensures `TransitionPlanner` provisions infra nodes before deployment nodes. The registrar must fire before the first reconciliation cycle — `@Observes StartupEvent` guarantees this.
 
 ### Platform Services as CaseHub Applications
 
@@ -102,10 +152,27 @@ The bootstrap topology uses the existing reconciliation loop — no new adapter 
 
 ### ApplicationDeploymentTarget Implementations
 
-Three `ApplicationDeploymentTarget` implementations extend the SPI from #83. All three are `@ApplicationScoped` CDI beans coexisting on the classpath, discoverable via `@Any Instance<ApplicationDeploymentTarget>`. Each has a `targetId()` method for routing. The deployment profile selects the default via CDI alternatives; per-node `deploymentTarget` overrides resolve to a specific target by `targetId()`:
+Three `ApplicationDeploymentTarget` implementations extend the SPI from #83. `ApplicationDeploymentTarget` gains a `targetId()` default method:
+
+```java
+public interface ApplicationDeploymentTarget {
+    default String targetId() { return ""; }
+    DeployResult deploy(String imageRef, DeployConfig config);
+    DeployResult undeploy(String instanceId);
+    NodeStatus status(String instanceId);
+    HealthCheckResult healthCheck(String instanceId);
+}
+```
+
+The default method avoids breaking existing implementations:
+- **`NoOpDeploymentTarget`** (`@DefaultBean` in `api/`) — inherits `targetId() = ""`, remains as CDI fallback. Not discoverable by target routing (empty ID never matches).
+- **`StubDeploymentTarget`** (`testing/`) — inherits `targetId() = ""`, continues working as-is in tests.
+
+All three new implementations are `@ApplicationScoped` CDI beans coexisting on the classpath, each overriding `targetId()`. `CaseHubAppProvisionHandler` is updated to inject `Instance<ApplicationDeploymentTarget>` (replacing the current single injection) and resolve by `targetId()` when a `DeploymentApplicationNodeSpec` carries a `deploymentTargetId`. For bare `CaseHubApplicationSpec` nodes (no per-node override), the handler uses the profile-default target selected via CDI alternative. `NoOpDeploymentTarget` with `@DefaultBean` is only active when no real target is configured — it's superseded by any CDI alternative.
 
 **InProcessDeploymentTarget** (`local-dev` default, `targetId() = "in-process"`):
-- `deploy()`: Verify CDI beans are resolvable for the given applicationId → return `Success(applicationId)`
+- In-process mode assumes all platform services are on the classpath at startup — a direct consequence of #118 (service extraction into embeddable libraries). `InProcessDeploymentTarget.deploy()` is a verification-only operation: it confirms CDI bean presence but cannot add beans at runtime. Missing classpath dependencies fail the bootstrap immediately with a clear error, not retry.
+- `deploy()`: Verify CDI beans are resolvable for the given applicationId → return `Success(applicationId)`. Fail immediately if beans are absent.
 - `undeploy()`: No-op (CDI beans can't be removed from a running container)
 - `status()`: Check CDI bean injection → `PRESENT` if resolvable, `ABSENT` if not
 - `healthCheck()`: Invoke bean's health endpoint if available → `Healthy` or `Unhealthy`
@@ -130,7 +197,7 @@ This follows the same pattern as `InfraBackend` discovery (ARC42STORIES §Layer 
 
 ```
 Phase 1 — SEED (ops app starts, provisions dependencies)
-├── Load topology YAML (classpath, standard YamlDesiredStateProcessor discovery)
+├── Load topology YAML (classpath META-INF/desiredstate/casehub-topology.yaml, standard YamlDesiredStateProcessor discovery)
 ├── Start reconciliation loop with tenancyId from casehub.ops.app.default-tenancy-id
 ├── Provision infra layer (via CrossDomainCompositionEngine ordering):
 │   ├── PostgreSQL (H2 in local-dev [Quarkus config], container in local-distributed, managed DB in enterprise)
@@ -143,7 +210,7 @@ Phase 1 — SEED (ops app starts, provisions dependencies)
 └── Health check all dependencies → Phase 2
 
 Phase 2 — SELF-AWARE (ops app activates self-maintenance)
-├── OpsAppSpec node in casehub-apps.yaml — adapter reports PRESENT (running seed)
+├── OpsAppSpec node in casehub-topology.yaml — adapter reports PRESENT (running seed)
 ├── SelfMaintenanceMonitor activates:
 │   ├── Monitor for new versions (config, registry, or manual trigger)
 │   ├── On upgrade: provision replacement via active ApplicationDeploymentTarget
@@ -162,7 +229,7 @@ Phase 2 — SELF-AWARE (ops app activates self-maintenance)
 | Mode | Mechanism | Handoff |
 |------|-----------|---------|
 | `local-dev` | Not applicable — developer restarts manually | N/A |
-| `local-distributed` | Old instance provisions new container via `PodmanDeploymentTarget.deploy()`, health-checks new container, then exits gracefully. Container stops as a natural consequence of process exit. New instance detects old stopped container via `PodmanClient` and removes it. | Container name convention (`casehub-ops`) identifies the old container. |
+| `local-distributed` | Old instance provisions new container via `PodmanDeploymentTarget.deploy()` with NO host port mapping (avoids port conflict with running instance). Health-check via Podman internal network DNS (container name `casehub-ops-next`). After health-check passes, old instance exits gracefully — container stops as a natural consequence of process exit. New instance detects old stopped container via `PodmanClient`, removes it, then remaps its own host port. | Container name convention: old=`casehub-ops`, new=`casehub-ops-next`. After swap, new container is renamed to `casehub-ops`. |
 | `enterprise` | Ops app patches its own K8s Deployment spec via fabric8 client to use the new image. K8s Deployment controller performs a standard rolling update — starts new pod, readiness-gates it, drains old pod. | K8s manages pod replacement, traffic switching, and old pod cleanup. The ops app initiates but does not execute the swap. |
 
 **Self-maintenance failure modes** (detailed protocol deferred to #123):
@@ -180,11 +247,11 @@ Phase 2 — SELF-AWARE (ops app activates self-maintenance)
 
 ### Topology YAML Examples
 
-**casehub-platform.yaml** (same across all profiles):
+**casehub-topology.yaml** (same across all profiles — all `casehub_application` nodes in one graph):
 ```yaml
 desiredState:
   namespace: casehub
-  name: casehub-platform
+  name: casehub-topology
 
 nodes:
   qhorus:
@@ -195,8 +262,8 @@ nodes:
       replicas: 1
       config:
         quarkus.http.port: "8081"
-    # Override example: force container even in local-dev
-    # deploymentTarget: podman
+      # Override example: force container even in local-dev
+      # deploymentTarget: podman
 
   eidos:
     type: casehub_application
@@ -211,15 +278,7 @@ nodes:
       applicationId: engine
       image: casehubio/engine:0.4-SNAPSHOT
       replicas: 1
-```
 
-**casehub-apps.yaml** (same across all profiles):
-```yaml
-desiredState:
-  namespace: casehub
-  name: casehub-apps
-
-nodes:
   ops-app:
     type: casehub_application
     dependsOn: [qhorus, eidos, engine]
@@ -258,23 +317,25 @@ nodes:
 ```yaml
   qhorus:
     type: casehub_application
-    existing: https://qhorus.internal:8443
     spec:
       applicationId: qhorus
       image: casehubio/qhorus:0.5
+      existing: https://qhorus.internal:8443
 ```
+
+Note: `existing` and `deploymentTarget` live inside the `spec:` block, following the infra domain's `backendId` pattern — `InfraWrappingFactory` extracts `backendId` from the spec map before converting to the typed record. The `DeploymentNodeSpecFactoryProvider` does the same for deployment routing fields. This avoids cross-repo `YamlNode` schema changes in `casehub-desiredstate-yaml`.
 
 ### Module Structure Changes
 
 | Module | Changes |
 |--------|---------|
-| `api/` | `ApplicationDeploymentTarget` extended with `targetId()` method. No new types — platform services use existing `CaseHubApplicationSpec` from `api.deployment`. |
-| `deployment/` | `InProcessDeploymentTarget`, `PodmanDeploymentTarget` implementations. `CaseHubAppProvisionHandler` updated to resolve target by `targetId()` via `@Any Instance<ApplicationDeploymentTarget>` (mirrors `InfraBackend` discovery pattern). |
+| `api/` | `ApplicationDeploymentTarget` extended with `default String targetId()` method. `DeploymentApplicationNodeSpec` wrapper record (mirrors `InfraDesiredNodeSpec`). No changes to existing `NoOpDeploymentTarget` (inherits default). |
+| `deployment/` | `DeploymentNodeSpecFactoryProvider` — registers `casehub_application` with `NodeSpecFactory` SPI, extracts `deploymentTarget`/`existing` from spec map (follows `InfraWrappingFactory` pattern). `InProcessDeploymentTarget`, `PodmanDeploymentTarget` implementations. `CaseHubAppProvisionHandler` updated to inject `Instance<ApplicationDeploymentTarget>` and resolve by `targetId()`. |
 | `container/` | No changes — existing `PodmanNodeProvisioner` handles `DatabaseContainerSpec` |
 | `infra/` | No changes — existing `InfraNodeProvisioner` handles `DatabaseClusterSpec` |
-| `service/` | Bootstrap phase coordinator, self-maintenance monitor |
+| `service/` | `BootstrapDomainRegistrar` — wires `CrossDomainCompositionEngine` with domain registrations (container→deployment ordering) at startup. Bootstrap phase coordinator, self-maintenance monitor. |
 | `app/` | `KubernetesDeploymentTarget`, deployment profile configuration, topology YAML classpath resources |
-| `testing/` | Test fixtures for deployment target stubs across all three profiles |
+| `testing/` | `StubDeploymentTarget` unchanged (inherits default `targetId()`). Test fixtures for deployment target stubs across all three profiles. |
 
 ### Testing Strategy
 
