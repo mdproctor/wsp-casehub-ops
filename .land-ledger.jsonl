@@ -1,2 +1,0 @@
-{"event":"land","repo":"ops","branch":"issue-139-real-instance-test-infra","base_branch":"main","landed_sha":"53551f6266f9b6c0375586ce54305220ad571a5d","push_target":"upstream","mirrored":true,"stamped":true,"timestamp":"2026-10-14T15:46:54.290265+00:00"}
-{"event":"promote","branch":"issue-130-accountability-ledger-work","files":[],"timestamp":"2026-10-14T23:38:53.472667+00:00"}
