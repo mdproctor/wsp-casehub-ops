@@ -64,13 +64,13 @@
 
 ## D6: Platform service node type location
 
-**Choice:** New PlatformServiceSpec sealed hierarchy in service/ module
+**Choice:** New PlatformServiceSpec sealed hierarchy in api/ module, provisioner/adapter in service/
 **Alternatives:**
 - Extend container module — ties platform services to container backend; in-process and K8s backends would need separate types elsewhere
 - Use existing infra domain — mixes CaseHub-specific platform services with generic infrastructure types; platform services have richer semantics (health, API compatibility, versioning)
-**Rationale:** Platform services are distinct from both generic infrastructure and domain modules. They have their own health semantics, version compatibility, and backend-specific provisioning. The service/ module already owns SPI implementations and wiring — it's the natural home. PlatformServiceProvisioner delegates to profile-selected backend CDI beans.
-**Trade-offs:** Adds a new sealed hierarchy and provisioner to service/ — increases its scope. But service/ is already the app's core library, and platform provisioning is inherently the app's concern.
-**Sources:** ContainerNodeSpec sealed hierarchy pattern, service/ module structure
+**Rationale:** Platform services are distinct from both generic infrastructure and domain modules. Following the established pattern: node spec types in api/ (like DeploymentNodeSpec, InfraNodeSpec, ComplianceControlSpec), provisioner/adapter implementations in the consuming module (service/). PlatformServiceProvisioner delegates to profile-selected backend CDI beans.
+**Trade-offs:** Adds a new sealed hierarchy to api/ and a provisioner to service/. api/ grows but this follows the existing cross-module type sharing pattern.
+**Sources:** api/ existing sealed hierarchies (DeploymentNodeSpec, InfraNodeSpec, ContainerNodeSpec), service/ module structure
 **Exploration:** quick
 **Depends on:** D3 (backend CDI selection determines how PlatformServiceProvisioner dispatches)
 **Status:** captured

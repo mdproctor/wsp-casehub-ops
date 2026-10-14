@@ -52,7 +52,7 @@ The desiredstate module system handles directory-based merging, classpath+filesy
 
 ### Platform Service Node Types
 
-New sealed hierarchy in `service/` module:
+New sealed hierarchy in `api/` module (following the established pattern where node spec types live in `api/`, provisioner/adapter implementations live in `service/`):
 
 ```java
 public sealed interface PlatformServiceSpec extends NodeSpec
@@ -177,8 +177,8 @@ Phase 1 — SEED (ops app starts, provisions dependencies)
 │   └── Engine (CDI beans, container, K8s pod)
 └── Health check all dependencies → Phase 2
 
-Phase 2 — SELF-AWARE (ops app registers itself as a managed node)
-├── Add OpsAppSpec node to the topology graph
+Phase 2 — SELF-AWARE (ops app activates self-maintenance)
+├── OpsAppSpec node already in apps.yaml — adapter now reports PRESENT (running seed)
 ├── SelfMaintenanceProvisioner activates:
 │   ├── Monitor for new versions (config, registry, or manual trigger)
 │   ├── On upgrade: provision replacement instance
@@ -188,7 +188,9 @@ Phase 2 — SELF-AWARE (ops app registers itself as a managed node)
 └── Key invariant: the running instance never kills itself — it orchestrates its replacement
 ```
 
-**Phase transition:** The ops app transitions from Phase 1 to Phase 2 when all dependencies report PRESENT from the actual-state adapter. This transition is idempotent — if the ops app restarts during Phase 1, it re-probes and continues.
+**Phase transition:** The ops app transitions from Phase 1 to Phase 2 when all dependencies report PRESENT from the actual-state adapter. During Phase 1, the `OpsAppSpec` node exists in the topology but the provisioner treats it as a no-op — the seed instance is already running, so the adapter reports PRESENT. Phase 2 activates the *self-maintenance monitor* that watches for version upgrades. This transition is idempotent — if the ops app restarts during Phase 1, it re-probes and continues.
+
+**Relationship to existing Quarkus profiles:** `%local-dev`, `%local-distributed`, and `%enterprise` are distinct from the existing `%dev` and `%test` Quarkus profiles. The existing profiles control test/dev-mode behaviour (H2, Hibernate schema management). The new profiles control the ops deployment topology and provisioner backends. They may share some config (e.g. `%local-dev` also uses H2 like `%dev`), but they serve different purposes.
 
 **Self-maintenance invariant:** The running ops instance provisions a new instance, health-checks it, swaps traffic, then the OLD instance shuts down. The new instance becomes the running instance and inherits the self-maintenance role. In local-dev this is a JVM restart with the new JAR. In containers, the old container is stopped after the new one is healthy. In K8s, it's a standard rolling update.
 
@@ -270,8 +272,8 @@ desiredstate:
 
 | Module | Changes |
 |--------|---------|
-| `api/` | New `io.casehub.ops.api.platform` package: `PlatformServiceSpec` sealed hierarchy |
-| `service/` | `PlatformGoalCompiler`, `PlatformActualStateAdapter`, `PlatformServiceProvisioner`, `PlatformBackend` SPI, `InProcessBackend`, health probes |
+| `api/` | New `io.casehub.ops.api.platform` package: `PlatformServiceSpec` sealed hierarchy, `PlatformBackend` SPI |
+| `service/` | `PlatformGoalCompiler`, `PlatformActualStateAdapter`, `PlatformServiceProvisioner`, `InProcessBackend`, health probes, bootstrap phase management |
 | `container/` | `ContainerPlatformBackend` (extends `PodmanNodeProvisioner` for platform services) |
 | `app/` | `KubernetesPlatformBackend`, profile-specific `application.properties`, bootstrap phase management |
 | `testing/` | Test fixtures for platform service stubs across all three profiles |
