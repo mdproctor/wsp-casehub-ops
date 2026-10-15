@@ -47,7 +47,8 @@ CsvDataSource), JUnit 5, Testcontainers, WireMock
 
 - [ ] **Step 1: Write the failing compilation test**
 
-Add Level 04 tests to `DeploymentCompilationTest.java`. Use
+Add `import java.util.List;` to `DeploymentCompilationTest.java`
+(needed for `List.of` in the dependency test). Then use
 `ide_insert_member` to add after the Level 03 section:
 
 ```java
