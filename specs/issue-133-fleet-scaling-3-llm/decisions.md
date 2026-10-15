@@ -23,6 +23,19 @@
 **Exploration:** quick
 **Status:** captured
 
+## D4: Eidos identity integration
+
+**Choice:** Both levels — static descriptors work (Level A), topology parameters demonstrate flow (Level B)
+**Alternatives:**
+- Static descriptors only — works but doesn't show the parameter flow concept
+- Dynamic-only — requires eidos changes that are out of scope for #133
+**Rationale:** The topology YAML includes per-instance config (capability, role/unit identifier) that flows through to claudony registration. Static descriptors.yaml provides 3 entries as the working baseline. The config values are there for eidos to consume when it gets parameterized (separate work). Even passing UUIDs as unit identifiers demonstrates the concept.
+**Trade-offs:** Two sources of truth temporarily (descriptors.yaml + topology config), but that's the migration path — Level B eventually makes descriptors.yaml unnecessary
+**Depends on:** D3 (CSV data source for per-instance params)
+**Sources:** topology-tests/src/test/resources/META-INF/eidos/descriptors.yaml
+**Exploration:** quick
+**Status:** captured
+
 ## D2: Integration test strategy
 
 **Choice:** Single test class following HelloLlmIntegrationTest pattern
