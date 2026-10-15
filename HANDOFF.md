@@ -1,49 +1,80 @@
-# Handover — Level 02 landed, CI fixed
+# Handover — Level 03 landed, manifest-driven LLM routing
 
 **Branch:** `main`
-**Issue:** casehubio/casehub-ops#130 (closed)
-**Status:** Level 02 complete. CI green. Ready for level 03 (#132).
+**Issue:** casehubio/casehub-ops#132 (closed)
+**Status:** Level 03 complete. Ready for Level 04 (#133).
 
 ## What happened this session
 
-### CI fix (all pre-existing failures)
+### Level 03: Case Management (#132)
 
-Fixed all compilation and test failures across 4 modules. CI now green.
+Added `03-case-management.yaml` — 7-node deployment topology adding qhorus:
+`manifest → eidos → engine/ledger → work → qhorus → my-llm`
 
-- **infra** — `InfraFaultPolicyTest`: `GraphMutation.AddDependency` → `AddEdge`, raw `AddNode` cast → typed `AddNode<DesiredNode>`
-- **compliance** — `ComplianceLedgerEntry`: import path `io.casehub.ledger.runtime.model.jpa` → `io.casehub.ledger.jpa`; `ComplianceReconciliationIntegrationTest`: `additions()` → `flatAdditions()`, `removals()` → `flatRemovals()`
-- **api** — `InfraNodeSpec`: added `extends NodeSpec` with default `nodeType()` via `resourceType()`, matching `DeploymentNodeSpec` pattern
-- **topology-tests** — `TopologyTestBase`: `YamlMappers.create()` → `createWithCoreModule()`; `SingleServiceCompilationTest`: removed `InfraDesiredNodeSpec` wrapper assertions; `MultiTierCompilationTest`: disabled aspirational lifecycle module test
+Qhorus depends on work + ledger. 4 compilation tests verify graph structure.
 
-### PR #102 closed
+### Manifest-driven LLM routing
 
-All three changes (dependency management, deployment test API migration, AgentDriftChecker constructor) already resolved on main.
+Replaced hardcoded `ANTHROPIC_API_KEY` detection with manifest-driven provider routing:
 
-### Level 02: Accountability (#130)
+- **Topology YAMLs** use `llm.capability: fast` (tier-based) + `llm.identity-source: eidos`
+- **ManifestLlmClient** reads the manifest provider chain: Ollama → Claude CLI → Simulation
+- **LlmMode** reports FULL vs SIMULATED from the response, not as a gate
+- **HelloWorldLlmTest** exercises all three providers individually + chain fallback
+- **`@OllamaAvailable`** / **`@LlmAvailable`** condition annotations for per-provider gating
 
-Added `02-accountability.yaml` — 6-node deployment topology:
-`manifest → eidos → engine/ledger → work → my-llm`
+### Eidos agent descriptor
 
-Also added `manifest` to Level 01 — required for AgentProvider to work with LLMs.
+Added `META-INF/eidos/descriptors.yaml` with the my-llm agent identity (briefing, disposition, capability tier). Shows the complete stack: topology declares capability, eidos generates the brief, manifest resolves the provider.
 
-- 12 compilation tests (graph structure, dependencies)
-- 15 reconciliation tests (ordering, execution, idempotency)
-- WireMock integration updated for 4-node Level 01
+### Platform issue filed and landed
+
+**platform#623**: manifest-driven model chains — tier-based capability routing with provider fallback. Adds chain aliases in manifest, simulation backend, backendKey filter on ModelQuery.
 
 ## Key decisions
 
-- **manifest is foundational** — eidos depends on it; every deployment topology needs it
-- **InfraNodeSpec extends NodeSpec** — aligns with DeploymentNodeSpec pattern, enables YAML compilation for infra types
-- **Real-instance integration tests deferred** — verifying ledger audit entries and work item creation needs actual service JARs wired into ServiceCluster framework
+- **Apps request capability tiers, not providers** — `llm.capability: fast` instead of `llm.provider: anthropic`
+- **Eidos generates the LLM brief** — `llm.identity-source: eidos`, not hardcoded system prompts
+- **Simulation is a provider, not a mode** — always available as last-resort fallback, tests never skip
+- **Vertex rawPredict endpoint not available** for this GCP project — Claude CLI handles Vertex auth natively
+
+## Environment setup
+
+`~/.casehub/agent-config.yaml` (machine-specific, not committed):
+```yaml
+providers:
+  - vendor: ollama
+    host: localhost:11434
+  - vendor: vertex
+    credential:
+      project-id: env:ANTHROPIC_VERTEX_PROJECT_ID
+      region: us-east5
+  - vendor: simulation
+aliases:
+  fast:
+    chain:
+      - tier: FAST
+        locality: LOCAL
+        backend-key: ollama
+      - tier: FAST
+        locality: CLOUD
+      - tier: FAST
+        backend-key: simulation
+defaults:
+  backend: ollama
+```
+
+Ollama installed (`/opt/homebrew/bin/ollama`), gemma3:4b model pulled.
 
 ## Next work
 
-**Level 03 (#132): Case management** — add qhorus to the deployment topology. Scale: S, Complexity: Med.
+**Level 04 (#133): Fleet scaling** — deploy 3 LLM instances. Scale: S, Complexity: Med.
 
 ## Key files
 
-- `topology-tests/src/test/resources/topologies/deployment/02-accountability.yaml`
-- `topology-tests/src/test/resources/topologies/deployment/01-hello-llm.yaml` (manifest added)
+- `topology-tests/src/test/resources/topologies/deployment/03-case-management.yaml`
+- `topology-tests/src/test/resources/META-INF/eidos/descriptors.yaml`
+- `topology-tests/src/test/java/io/casehub/ops/topology/integration/ManifestLlmClient.java`
+- `topology-tests/src/test/java/io/casehub/ops/topology/integration/HelloWorldLlmTest.java`
+- `topology-tests/src/test/java/io/casehub/ops/topology/integration/OllamaAvailable.java`
 - `topology-tests/src/test/java/io/casehub/ops/topology/compilation/DeploymentCompilationTest.java`
-- `topology-tests/src/test/java/io/casehub/ops/topology/reconciliation/DeploymentReconciliationTest.java`
-- `api/src/main/java/io/casehub/ops/api/infra/InfraNodeSpec.java` (now extends NodeSpec)
