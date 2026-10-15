@@ -1,0 +1,15 @@
+# Work Plan — issue-133-fleet-scaling-3-llm
+
+## State
+branch: issue-133-fleet-scaling-3-llm
+state: scaffolded
+project-sha: 
+date: 
+issue-repo: casehubio/casehub-ops
+covers: 133
+design-repo: 
+design-section-hashes: 
+flyway-next-v: 
+
+## Queue
+- [ ] casehubio/casehub-ops#133 — Issue #133 ← active
