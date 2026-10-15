@@ -18,3 +18,4 @@ flyway-next-v:
   - [x] Batch 2: Descriptors+Integration
     - [x] Task 2: Add eidos descriptors
     - [x] Task 3: Fleet integration test
+- [ ] casehubio/casehub-ops#143 — end-to-end-llm-identity-test
