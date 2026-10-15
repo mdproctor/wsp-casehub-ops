@@ -13,3 +13,8 @@ flyway-next-v:
 
 ## Queue
 - [ ] casehubio/casehub-ops#133 — Issue #133 ← active
+  - [ ] Batch 1: Topology+Compilation
+    - [ ] Task 1: Create fleet YAML and compilation tests
+  - [ ] Batch 2: Descriptors+Integration
+    - [ ] Task 2: Add eidos descriptors
+    - [ ] Task 3: Fleet integration test
