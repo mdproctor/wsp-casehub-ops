@@ -10,6 +10,19 @@
 **Exploration:** quick
 **Status:** captured
 
+## D3: Per-instance parameterization mechanism
+
+**Choice:** CSV data source with inline data block
+**Alternatives:**
+- Simple list + variables lookup — requires nested variable resolution (${var.fleet.${each.name}.capability}) which may not be supported
+- Simple list, number only — doesn't demonstrate differentiation, misses the pedagogical point
+**Rationale:** CSV data source is already proven in ForEachExpander (csvDataSource_expandsWithRowFields test). Naturally expresses a "fleet manifest" — the data block describes fleet composition (name, capability), the topology references it. Each instance gets unique config that flows through to eidos for identity generation.
+**Trade-offs:** Slightly more YAML surface area than a simple list, but the data block IS the lesson — fleet composition as data, not duplicated structure
+**Depends on:** D1 (forEach pattern)
+**Sources:** desiredstate/yaml/runtime ForEachExpanderTest.java:252-271, CsvDataSource
+**Exploration:** quick
+**Status:** captured
+
 ## D2: Integration test strategy
 
 **Choice:** Single test class following HelloLlmIntegrationTest pattern
