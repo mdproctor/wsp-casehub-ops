@@ -1,60 +1,68 @@
-# Handover — Fleet scaling + LLM identity test complete
+# Handover — Ready for Operations arc (Levels 05-08)
 
-**Branch:** `issue-133-fleet-scaling-3-llm`
-**Issues:** casehubio/casehub-ops#133 (done), casehubio/casehub-ops#143 (done)
-**Status:** Both issues complete. Branch ready for work-end.
-**Base:** rebased on 0.3 (upstream/main)
+**Branch:** `main` (clean — previous branch landed)
+**Closed this session:** #133 (Level 04 fleet scaling), #143 (LLM identity test)
+**Next work:** Operations arc — levels 05-08 (#134, #135, #136, #137)
 
-## What was done
+## What was done this session
 
-### Issue #133 — Fleet scaling (Level 04)
+### Implementation
 
-Fleet topology with CSV data source + forEach expansion, deploying 3 differentiated LLM instances:
+1. **#143 — End-to-end LLM identity test** (completed and landed)
+   - `LlmIdentityTest.java` — 7 tests proving config → descriptor → briefing → LLM identity
+   - Added `casehub-eidos-core` test dependency
+   - Bug fix: separated `llm.model-tier` from `llm.capability` in descriptor YAML
+   - All 3 integration-live tests pass against Ollama
 
-- `04-llm-fleet.yaml` — topology with `data` block + `forEach` expanding 3 nodes
-- Parameterised eidos descriptors with `${config.*}` references
-- 5 compilation tests (node count, types, IDs, dependencies, per-instance config)
-- Integration test deploying 3 real instances to claudony
-- Archetype, domain, and org identity fields in fleet descriptors
-
-### Issue #143 — End-to-end LLM identity test
-
-Proves the full parameter pipeline: topology config → `${config.*}` resolution → AgentDescriptor → briefing text → LLM response reflects identity.
-
-- `LlmIdentityTest.java` — 7 tests (4 deterministic + 3 integration-live)
-- Deterministic: analyst identity, coder identity, different briefings, no placeholders
-- Integration-live: LLM response reflects analyst identity, coder identity, different responses
-- All 3 integration-live tests pass against Ollama (gemma3:4b)
-- Bug fix: separated `llm.model-tier` from `llm.capability` in descriptor YAML
+2. **Closed branch `issue-133-fleet-scaling-3-llm`** — squashed to 3 commits, landed on main
 
 ### Planning — topology levels roadmap
 
-Designed and filed the full 18-level progression plus infrastructure:
+Designed the full 18-level progression and filed 17 new issues:
 
-- **Roadmap doc:** `docs/topology-levels-roadmap.md` (full graph with status)
-- **New level issues:** #146-149 (Levels 10-13), #154-158 (Levels 14-18)
-- **Multi-environment epic:** #150 with children #151-153 (env abstraction, k8s, podman)
-- **Dual-runtime:** #160 (deploy as Quarkus and Spring to prove framework neutrality)
-- **Showcase UI:** #159 (run levels from ops app with live results)
-- **Epic #131 updated:** 18 levels grouped by narrative arc, operational assertions principle
+**New topology levels:**
+- #146 Level 10: Pool deployment — managed claudony instance pool
+- #147 Level 11: Blocks use case — logistics summariser
+- #148 Level 12: Ad-hoc LLM deployer — runtime deployment via RAS input
+- #149 Level 13: Agentic mesh — multi-agent delegation and communication
+- #154 Level 14: Fault recovery — automatic detection and replacement
+- #155 Level 15: Multi-tenancy — same topology, isolated tenants
+- #156 Level 16: Security — service-to-service auth and credential injection
+- #157 Level 17: Compliance posture — continuous monitoring and remediation
+- #158 Level 18: Full platform — all modules, all services, everything installed
 
-## Key files
+**Multi-environment epic #150:**
+- #151 Environment abstraction layer
+- #152 Kubernetes provisioner (k3d/kind)
+- #153 Podman provisioner
+- #160 Dual-runtime (deploy as Quarkus and Spring — proves framework neutrality)
 
-| File | Purpose |
-|------|---------|
-| `topology-tests/src/test/resources/topologies/deployment/04-llm-fleet.yaml` | Fleet topology with CSV data + forEach |
-| `topology-tests/src/test/resources/META-INF/eidos/descriptors.yaml` | Static + parameterised descriptors |
-| `topology-tests/src/test/java/.../DeploymentCompilationTest.java` | Level 01-04 compilation tests |
-| `topology-tests/src/test/java/.../FleetScalingIntegrationTest.java` | Real claudony deployment test |
-| `topology-tests/src/test/java/.../LlmIdentityTest.java` | End-to-end identity pipeline test |
+**Tooling:**
+- #159 Showcase UI — run levels from ops app with live results
+- #161 Fleet observability UI — live monitoring of deployed topology
 
-## What remains on this branch
+**Updated:**
+- #131 epic — 18 levels grouped by narrative arc + operational assertions principle
+- #137 Level 08 — expanded from "add RAS" to full observability (RAS, health, metrics, application signals)
 
-Nothing. Both issues complete. Run `work end` to close.
+### Key design decisions
 
-## Next work
+- **Levels are both tutorial and smoke test** — each asserts its runtime capability works end-to-end (deploy → exercise → assert outcome → assert audit)
+- **Infrastructure not a level** — dropped "Level 18: Infrastructure" since drift detection (05) and governance gates (02) already demonstrate the concept
+- **Dual-runtime as a smoke test** — deploying same topology on Quarkus and Spring proves domain modules are framework-neutral. If CDI leaked into core logic, the Spring build fails — that IS the test
+- **Level 09 (Chat UI) flagged** as a standalone app — may need reclassifying out of the level progression
 
-Continue through the levels. Candidates in priority order:
-1. #134 Level 05: Config drift (builds on 04, natural next step)
-2. #140 Claudony NodeProvisioner (infrastructure for later levels)
-3. #146 Level 10: Pool deployment (new pattern)
+## Roadmap doc
+
+`docs/topology-levels-roadmap.md` in workspace — full graph with status, narrative arcs, operational assertions principle.
+
+## Next session
+
+Start the Operations arc (levels 05-08). Recommended order:
+
+1. **#134 Level 05: Config drift** — S/Med, builds directly on Level 04 fleet
+2. **#135 Level 06: Lifecycle** — S/Med, suspend/resume the fleet
+3. **#136 Level 07: Topology mutations** — S/Med, add/remove apps
+4. **#137 Level 08: Fleet observability** — M/Med, full signal chain
+
+These can share a branch since they're an incremental progression on the same fleet. Create a new branch covering all four, or one per level — user's choice.
