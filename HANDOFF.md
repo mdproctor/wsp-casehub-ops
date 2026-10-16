@@ -1,80 +1,60 @@
-# Handover — Level 03 landed, manifest-driven LLM routing
+# Handover — Fleet scaling + LLM identity test complete
 
-**Branch:** `main`
-**Issue:** casehubio/casehub-ops#132 (closed)
-**Status:** Level 03 complete. Ready for Level 04 (#133).
+**Branch:** `issue-133-fleet-scaling-3-llm`
+**Issues:** casehubio/casehub-ops#133 (done), casehubio/casehub-ops#143 (done)
+**Status:** Both issues complete. Branch ready for work-end.
+**Base:** rebased on 0.3 (upstream/main)
 
-## What happened this session
+## What was done
 
-### Level 03: Case Management (#132)
+### Issue #133 — Fleet scaling (Level 04)
 
-Added `03-case-management.yaml` — 7-node deployment topology adding qhorus:
-`manifest → eidos → engine/ledger → work → qhorus → my-llm`
+Fleet topology with CSV data source + forEach expansion, deploying 3 differentiated LLM instances:
 
-Qhorus depends on work + ledger. 4 compilation tests verify graph structure.
+- `04-llm-fleet.yaml` — topology with `data` block + `forEach` expanding 3 nodes
+- Parameterised eidos descriptors with `${config.*}` references
+- 5 compilation tests (node count, types, IDs, dependencies, per-instance config)
+- Integration test deploying 3 real instances to claudony
+- Archetype, domain, and org identity fields in fleet descriptors
 
-### Manifest-driven LLM routing
+### Issue #143 — End-to-end LLM identity test
 
-Replaced hardcoded `ANTHROPIC_API_KEY` detection with manifest-driven provider routing:
+Proves the full parameter pipeline: topology config → `${config.*}` resolution → AgentDescriptor → briefing text → LLM response reflects identity.
 
-- **Topology YAMLs** use `llm.capability: fast` (tier-based) + `llm.identity-source: eidos`
-- **ManifestLlmClient** reads the manifest provider chain: Ollama → Claude CLI → Simulation
-- **LlmMode** reports FULL vs SIMULATED from the response, not as a gate
-- **HelloWorldLlmTest** exercises all three providers individually + chain fallback
-- **`@OllamaAvailable`** / **`@LlmAvailable`** condition annotations for per-provider gating
+- `LlmIdentityTest.java` — 7 tests (4 deterministic + 3 integration-live)
+- Deterministic: analyst identity, coder identity, different briefings, no placeholders
+- Integration-live: LLM response reflects analyst identity, coder identity, different responses
+- All 3 integration-live tests pass against Ollama (gemma3:4b)
+- Bug fix: separated `llm.model-tier` from `llm.capability` in descriptor YAML
 
-### Eidos agent descriptor
+### Planning — topology levels roadmap
 
-Added `META-INF/eidos/descriptors.yaml` with the my-llm agent identity (briefing, disposition, capability tier). Shows the complete stack: topology declares capability, eidos generates the brief, manifest resolves the provider.
+Designed and filed the full 18-level progression plus infrastructure:
 
-### Platform issue filed and landed
-
-**platform#623**: manifest-driven model chains — tier-based capability routing with provider fallback. Adds chain aliases in manifest, simulation backend, backendKey filter on ModelQuery.
-
-## Key decisions
-
-- **Apps request capability tiers, not providers** — `llm.capability: fast` instead of `llm.provider: anthropic`
-- **Eidos generates the LLM brief** — `llm.identity-source: eidos`, not hardcoded system prompts
-- **Simulation is a provider, not a mode** — always available as last-resort fallback, tests never skip
-- **Vertex rawPredict endpoint not available** for this GCP project — Claude CLI handles Vertex auth natively
-
-## Environment setup
-
-`~/.casehub/agent-config.yaml` (machine-specific, not committed):
-```yaml
-providers:
-  - vendor: ollama
-    host: localhost:11434
-  - vendor: vertex
-    credential:
-      project-id: env:ANTHROPIC_VERTEX_PROJECT_ID
-      region: us-east5
-  - vendor: simulation
-aliases:
-  fast:
-    chain:
-      - tier: FAST
-        locality: LOCAL
-        backend-key: ollama
-      - tier: FAST
-        locality: CLOUD
-      - tier: FAST
-        backend-key: simulation
-defaults:
-  backend: ollama
-```
-
-Ollama installed (`/opt/homebrew/bin/ollama`), gemma3:4b model pulled.
-
-## Next work
-
-**Level 04 (#133): Fleet scaling** — deploy 3 LLM instances. Scale: S, Complexity: Med.
+- **Roadmap doc:** `docs/topology-levels-roadmap.md` (full graph with status)
+- **New level issues:** #146-149 (Levels 10-13), #154-158 (Levels 14-18)
+- **Multi-environment epic:** #150 with children #151-153 (env abstraction, k8s, podman)
+- **Dual-runtime:** #160 (deploy as Quarkus and Spring to prove framework neutrality)
+- **Showcase UI:** #159 (run levels from ops app with live results)
+- **Epic #131 updated:** 18 levels grouped by narrative arc, operational assertions principle
 
 ## Key files
 
-- `topology-tests/src/test/resources/topologies/deployment/03-case-management.yaml`
-- `topology-tests/src/test/resources/META-INF/eidos/descriptors.yaml`
-- `topology-tests/src/test/java/io/casehub/ops/topology/integration/ManifestLlmClient.java`
-- `topology-tests/src/test/java/io/casehub/ops/topology/integration/HelloWorldLlmTest.java`
-- `topology-tests/src/test/java/io/casehub/ops/topology/integration/OllamaAvailable.java`
-- `topology-tests/src/test/java/io/casehub/ops/topology/compilation/DeploymentCompilationTest.java`
+| File | Purpose |
+|------|---------|
+| `topology-tests/src/test/resources/topologies/deployment/04-llm-fleet.yaml` | Fleet topology with CSV data + forEach |
+| `topology-tests/src/test/resources/META-INF/eidos/descriptors.yaml` | Static + parameterised descriptors |
+| `topology-tests/src/test/java/.../DeploymentCompilationTest.java` | Level 01-04 compilation tests |
+| `topology-tests/src/test/java/.../FleetScalingIntegrationTest.java` | Real claudony deployment test |
+| `topology-tests/src/test/java/.../LlmIdentityTest.java` | End-to-end identity pipeline test |
+
+## What remains on this branch
+
+Nothing. Both issues complete. Run `work end` to close.
+
+## Next work
+
+Continue through the levels. Candidates in priority order:
+1. #134 Level 05: Config drift (builds on 04, natural next step)
+2. #140 Claudony NodeProvisioner (infrastructure for later levels)
+3. #146 Level 10: Pool deployment (new pattern)
