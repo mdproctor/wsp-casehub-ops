@@ -2,7 +2,7 @@
 
 ## State
 branch: issue-133-fleet-scaling-3-llm
-state: closing:promoted
+state: closing:pushed
 project-sha: 
 date: 
 issue-repo: casehubio/casehub-ops
