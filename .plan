@@ -2,7 +2,7 @@
 
 ## State
 branch: issue-133-fleet-scaling-3-llm
-state: scaffolded
+state: active
 project-sha: 
 date: 
 issue-repo: casehubio/casehub-ops
@@ -12,10 +12,5 @@ design-section-hashes:
 flyway-next-v: 
 
 ## Queue
-- [ ] casehubio/casehub-ops#133 — Issue #133 ← active
-  - [x] Batch 1: Topology+Compilation
-    - [x] Task 1: Create fleet YAML and compilation tests
-  - [x] Batch 2: Descriptors+Integration
-    - [x] Task 2: Add eidos descriptors
-    - [x] Task 3: Fleet integration test
-- [ ] casehubio/casehub-ops#143 — end-to-end-llm-identity-test
+- [x] casehubio/casehub-ops#133 — Issue #133
+- [ ] casehubio/casehub-ops#143 — end-to-end-llm-identity-test ← active
