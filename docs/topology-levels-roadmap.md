@@ -20,10 +20,10 @@ Epic #131: Deployment topology integration tests — progressive tutorial
 |       +-- [~] #143  End-to-end LLM identity test (code done, issue open)
 |
 +-- Operations — here's how it runs day-to-day
-|   +-- [ ] #134  Level 05: Config drift — change config, only diff reconciled
-|   +-- [ ] #135  Level 06: Lifecycle — suspend / resume
-|   +-- [ ] #136  Level 07: Topology mutations — add / remove apps
-|   +-- [ ] #137  Level 08: Fleet monitoring — + RAS
+|   +-- [~] #134  Level 05: Config drift — change config, only diff reconciled
+|   +-- [~] #135  Level 06: Lifecycle — suspend / resume
+|   +-- [~] #136  Level 07: Topology mutations — add / remove apps
+|   +-- [~] #137  Level 08: Fleet monitoring — + RAS
 |
 +-- Patterns — here's what you build with it
 |   +-- [ ] #138  Level 09: Chat UI — standalone qhorus conversation viewer
