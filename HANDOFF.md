@@ -1,150 +1,60 @@
-# Handover — Level 04 fleet scaling in progress
+# Handover — Fleet scaling + LLM identity test complete
 
 **Branch:** `issue-133-fleet-scaling-3-llm`
-**Issues:** casehubio/casehub-ops#133, casehubio/casehub-ops#143
-**Status:** Core fleet topology and tests complete. Org structure and end-to-end LLM identity test remaining.
+**Issues:** casehubio/casehub-ops#133 (done), casehubio/casehub-ops#143 (done)
+**Status:** Both issues complete. Branch ready for work-end.
 **Base:** rebased on 0.3 (upstream/main)
 
 ## What was done
 
-### 1. Fleet topology YAML with CSV data source
+### Issue #133 — Fleet scaling (Level 04)
 
-`topology-tests/src/test/resources/topologies/deployment/04-llm-fleet.yaml`
+Fleet topology with CSV data source + forEach expansion, deploying 3 differentiated LLM instances:
 
-Builds on Level 01 (hello-llm). Same 3 platform services (manifest, eidos, engine), but replaces the single `my-llm` node with a parameterised fleet using `data` block + `forEach`:
+- `04-llm-fleet.yaml` — topology with `data` block + `forEach` expanding 3 nodes
+- Parameterised eidos descriptors with `${config.*}` references
+- 5 compilation tests (node count, types, IDs, dependencies, per-instance config)
+- Integration test deploying 3 real instances to claudony
+- Archetype, domain, and org identity fields in fleet descriptors
 
-```yaml
-data:
-  llm-fleet:
-    inline: |
-      name:STRING,role:STRING,capability:STRING,archetype:STRING,adjective:STRING,domain:STRING
-      analyst,analyst,deep,investigator,methodical,analysis
-      coder,developer,fast,engineer,pragmatic,software-engineering
-      assistant,assistant,balanced,coordinator,versatile,general
-```
+### Issue #143 — End-to-end LLM identity test
 
-ForEachExpander produces 3 nodes: `my-llm.analyst`, `my-llm.coder`, `my-llm.assistant`. Each gets a distinct `applicationId` and config values from the CSV row.
+Proves the full parameter pipeline: topology config → `${config.*}` resolution → AgentDescriptor → briefing text → LLM response reflects identity.
 
-Per-instance config includes: `llm.agent-id`, `llm.name`, `llm.role`, `llm.capability`, `llm.archetype`, `llm.adjective`, `llm.domain`, `llm.identity-source`.
+- `LlmIdentityTest.java` — 7 tests (4 deterministic + 3 integration-live)
+- Deterministic: analyst identity, coder identity, different briefings, no placeholders
+- Integration-live: LLM response reflects analyst identity, coder identity, different responses
+- All 3 integration-live tests pass against Ollama (gemma3:4b)
+- Bug fix: separated `llm.model-tier` from `llm.capability` in descriptor YAML
 
-### 2. Parameterised eidos descriptor
+### Planning — topology levels roadmap
 
-`topology-tests/src/test/resources/META-INF/eidos/descriptors.yaml`
+Designed and filed the full 18-level progression plus infrastructure:
 
-Replaces 3 static fleet descriptors with 1 parameterised entry using `${config.*}` references:
-
-```yaml
-- agentId: ${config.llm.agent-id:my-llm-fleet}
-  name: ${config.llm.name:Fleet LLM}
-  slot: ${config.llm.role:assistant}
-  archetype: ${config.llm.archetype:assistant}
-  archetypeAdjectives:
-    - ${config.llm.adjective:versatile}
-  domainVocabulary: ${config.llm.domain:general}
-  ...
-```
-
-`DescriptorPreprocessor` in `eidos-core` resolves these via MicroProfile Config (Quarkus) or Spring Environment at app startup. No code needed — declarative.
-
-The static `my-llm` descriptor for Level 01 is preserved alongside it.
-
-### 3. Compilation tests (5 tests)
-
-`topology-tests/src/test/java/io/casehub/ops/topology/compilation/DeploymentCompilationTest.java`
-
-- `llmFleet_hasSixNodes` — 3 platform + 3 LLM instances
-- `llmFleet_allNodesAreCasehubApplication` — all node types correct
-- `llmFleet_threeExpandedLlmNodes` — node IDs: my-llm.analyst, my-llm.coder, my-llm.assistant
-- `llmFleet_allLlmNodesDependOnEngine` — dependency edges correct
-- `llmFleet_configValuesFlowPerInstance` — asserts per-instance config: analyst→deep/analyst, coder→fast/developer, assistant→balanced/assistant
-
-### 4. Integration test
-
-`topology-tests/src/test/java/io/casehub/ops/topology/integration/FleetScalingIntegrationTest.java`
-
-- `deploysThreeFleetInstancesViaRealClaudony` — deploys all 6 nodes to real claudony, verifies deploy success and healthy status for all 3 LLM instances
-- `fleetInstancesHaveDistinctApplicationIds` — verifies the 3 expanded nodes have distinct applicationIds
-
-Tagged `@Tag("integration-live")` — requires claudony jar built (`mvn -pl app package -DskipTests` in claudony repo) and `-Pintegration-live` profile.
-
-### 5. Version bump
-
-Branch rebased on upstream/main which has the 0.3 release. `mvn install -DskipTests` completed — all 0.3 artifacts in local .m2.
-
-## What remains
-
-### A. Org structure in topology YAML
-
-The 3 fleet agents need an organisational structure expressing their relationships. Now unblocked — `@NodeTypeId("org:unit")` and `@NodeTypeId("org:relationship")` were added in desiredstate#171 (landed in 0.3).
-
-**What to do:**
-1. Register `org:unit` and `org:relationship` in the type registry alongside `DeploymentNodeSpec` and `InfraNodeSpec`
-2. Add nodes to `04-llm-fleet.yaml`:
-   - One `org:unit` node for the fleet (unitId: llm-fleet, members: the 3 agents with roles)
-   - `org:relationship` nodes for delegation between agents (e.g., analyst DELEGATES_TO coder for implementation, coder DELEGATES_TO analyst for investigation)
-3. Add compilation tests asserting org nodes compile and have correct structure
-4. The org node depends on the fleet members (the unit references their agentIds)
-
-**Key types:**
-- `OrgUnitNodeSpec(OrganizationalUnit unit)` — wraps an `OrganizationalUnit` with `unitId`, `name`, `kind`, `tenancyId`, `members` (list of `Membership(agentId, role, roleVocabulary)`)
-- `OrgRelationshipNodeSpec(AgentRelationship relationship)` — wraps `AgentRelationship` with `sourceAgentId`, `targetAgentId`, `kind` (SUPERVISES, DELEGATES_TO, ESCALATES_TO, REPORTS_TO, BACKS_UP, EXTENDED), `scope`, `tenancyId`
-- `OrgNodeTypes.UNIT` = `"org:unit"`, `OrgNodeTypes.RELATIONSHIP` = `"org:relationship"`
-
-**Reference:** `desiredstate/eidos/src/test/java/io/casehub/eidos/org/runtime/OrgGoalCompilerTest.java` — shows how org units and relationships are constructed and what the compiled graph looks like.
-
-### B. End-to-end LLM identity test (ops#143)
-
-Prove the full parameter pipeline: topology CSV → forEach expansion → per-instance config → eidos descriptor resolution → rendered system prompt → LLM output reflects the agent's identity.
-
-**Approach (from ops#143):**
-1. Add `casehub-eidos-core` as a test dependency in topology-tests (needed for `DescriptorPreprocessor` and render pipeline)
-2. Load the parameterised descriptor YAML
-3. Resolve `${config.*}` with test config values using `DescriptorPreprocessor`
-4. Render the system prompt via `DefaultPromptAssembler` or `EidosRenderPipeline`
-5. Send system prompt + user prompt to LLM via `ManifestLlmClient` (Ollama/Claude CLI/simulation)
-6. Assert response reflects the configured identity (role, archetype, domain)
-
-**Key classes in eidos-core 0.3:**
-- `io.casehub.eidos.core.yaml.DescriptorPreprocessor` — resolves `${config.*}`
-- `io.casehub.eidos.core.renderer.DefaultPromptAssembler` — assembles system prompt from descriptor
-- `io.casehub.eidos.core.renderer.EidosRenderPipeline` — full render pipeline
-- `io.casehub.eidos.core.registrar.ClasspathYamlDescriptorRegistrar` — loads META-INF/eidos/descriptors.yaml
-
-**Testing tiers:**
-- Simulation: deterministic, always runs
-- Ollama: `@OllamaAvailable` guard, gemma3:4b model
-- Claude CLI: `@LlmAvailable` guard, Vertex auth via claude CLI
-
-**Cross-platform note:** The `${config.*}` mechanism needs to work for both Quarkus (MicroProfile Config) and Spring (Environment) deployments — the ops examples demonstrate both "deploy as Quarkus" and "deploy as Spring". The preprocessor abstraction is an eidos concern, not ops.
-
-## Design decisions (in workspace)
-
-All captured in `specs/issue-133-fleet-scaling-3-llm/decisions.md`:
-- D1: forEach + iterations pattern (not explicit nodes or replicas)
-- D2: Single integration test class
-- D3: CSV data source for per-instance parameterisation
-- D4: Both levels — static descriptors work (Level A), topology params demonstrate config-driven flow (Level B)
+- **Roadmap doc:** `docs/topology-levels-roadmap.md` (full graph with status)
+- **New level issues:** #146-149 (Levels 10-13), #154-158 (Levels 14-18)
+- **Multi-environment epic:** #150 with children #151-153 (env abstraction, k8s, podman)
+- **Dual-runtime:** #160 (deploy as Quarkus and Spring to prove framework neutrality)
+- **Showcase UI:** #159 (run levels from ops app with live results)
+- **Epic #131 updated:** 18 levels grouped by narrative arc, operational assertions principle
 
 ## Key files
 
 | File | Purpose |
 |------|---------|
 | `topology-tests/src/test/resources/topologies/deployment/04-llm-fleet.yaml` | Fleet topology with CSV data + forEach |
-| `topology-tests/src/test/resources/META-INF/eidos/descriptors.yaml` | Static (Level 01) + parameterised (Level 04) descriptors |
-| `topology-tests/src/test/java/io/casehub/ops/topology/compilation/DeploymentCompilationTest.java` | Level 01-04 compilation tests |
-| `topology-tests/src/test/java/io/casehub/ops/topology/integration/FleetScalingIntegrationTest.java` | Real claudony deployment test |
-| `topology-tests/src/test/java/io/casehub/ops/topology/integration/ManifestLlmClient.java` | LLM provider client (Ollama/Claude CLI/simulation) |
-| `topology-tests/src/test/java/io/casehub/ops/topology/integration/HelloWorldLlmTest.java` | Per-provider LLM tests from #132 |
+| `topology-tests/src/test/resources/META-INF/eidos/descriptors.yaml` | Static + parameterised descriptors |
+| `topology-tests/src/test/java/.../DeploymentCompilationTest.java` | Level 01-04 compilation tests |
+| `topology-tests/src/test/java/.../FleetScalingIntegrationTest.java` | Real claudony deployment test |
+| `topology-tests/src/test/java/.../LlmIdentityTest.java` | End-to-end identity pipeline test |
 
-## Workspace files
+## What remains on this branch
 
-| File | Purpose |
-|------|---------|
-| `specs/issue-133-fleet-scaling-3-llm/2026-10-15-fleet-scaling-design.md` | Design spec (needs updating for expanded scope) |
-| `specs/issue-133-fleet-scaling-3-llm/decisions.md` | 4 captured decisions |
-| `plans/2026-10-15-fleet-scaling.md` | Implementation plan (covers original scope, needs extending) |
+Nothing. Both issues complete. Run `work end` to close.
 
-## Future levels (noted during brainstorming, out of scope)
+## Next work
 
-- **Pooling and scaling** — dynamic instance count based on load
-- **LLM-as-deployer** — an LLM that ad-hoc deploys other LLMs
+Continue through the levels. Candidates in priority order:
+1. #134 Level 05: Config drift (builds on 04, natural next step)
+2. #140 Claudony NodeProvisioner (infrastructure for later levels)
+3. #146 Level 10: Pool deployment (new pattern)
