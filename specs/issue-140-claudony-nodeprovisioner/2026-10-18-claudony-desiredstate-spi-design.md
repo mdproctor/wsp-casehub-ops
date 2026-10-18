@@ -8,7 +8,7 @@
 
 The claudony module becomes a standalone desiredstate domain managing the claudony fleet declaratively. It implements the full SPI Quad: GoalCompiler, ActualStateAdapter, NodeProvisioner, FaultPolicy, and EventSource.
 
-This supersedes ADR-0002 for the fleet management use case while leaving ADR-0002's `ApplicationDeploymentTarget` decision valid for the deployment module's multi-target routing. The two patterns are complementary, not conflicting.
+ADR-0003 establishes a standalone SPI Quad for claudony fleet management alongside ADR-0002's deployment target pattern. ADR-0002 remains fully valid for its original scope (`casehub_application` nodes via `ApplicationDeploymentTarget`). The claudony desiredstate module introduces new node types (`claudony_app`, `claudony_pool`) that are distinct from `casehub_application` — the two patterns are complementary, not sequential.
 
 ## Domain Boundary
 
@@ -27,7 +27,10 @@ New package `io.casehub.ops.api.claudony` in the `api/` module.
 
 ```java
 public sealed interface ClaudonyNodeSpec extends NodeSpec
-    permits ClaudonyAppNodeSpec, ClaudonyPoolNodeSpec {}
+    permits ClaudonyAppNodeSpec, ClaudonyPoolNodeSpec {
+    String nodeId();
+    @Override NodeType nodeType();
+}
 ```
 
 Sealed hierarchy follows ARC42STORIES section 4 Type Strategy Selection: apps and pools have genuinely different fields and provisioning semantics.
@@ -102,17 +105,18 @@ public record ClaudonyGoals(
 ### ClaudonyReviewSpec
 
 ```java
-@NodeTypeId("claudony_review")
-public record ClaudonyReviewSpec(
-    String failedNodeId,
-    int failureCount,
-    String lastError
-) implements NodeSpec {
+public record ClaudonyReviewSpec(NodeId faultedNode, String reason) implements NodeSpec {
+    public ClaudonyReviewSpec {
+        Objects.requireNonNull(faultedNode, "faultedNode");
+        Objects.requireNonNull(reason, "reason");
+    }
+
+    @Override
     public NodeType nodeType() { return NodeType.of("claudony_review"); }
 }
 ```
 
-Fault escalation target for `ClaudonyFaultPolicy`.
+Fault escalation target for `ClaudonyFaultPolicy`. Follows `ContainerReviewSpec` pattern — uses `NodeId` (matching `FaultEvent.node()` return type) and `String reason` (from `FaultEvent.detail()`). No `@NodeTypeId` annotation: review specs are created at runtime by `FaultPolicy.addReviewNode()`, not loaded from YAML via `NodeSpecFactoryProvider`. `failureCount` removed — `ReviewSpecFactory.create(FaultEvent, DesiredStateGraph)` does not receive failure count data (tracked internally by `ThresholdFaultPolicy` via `FaultCountStore`).
 
 ## SPI Implementations (claudony module)
 
@@ -120,7 +124,9 @@ All five SPI beans in `io.casehub.ops.claudony`.
 
 ### ClaudonyGoalCompiler
 
-`GoalCompiler<ClaudonyGoals>`, `@ApplicationScoped`.
+`GoalCompiler<ClaudonyGoals>`, `@ApplicationScoped`, `@DesiredStateQualifier(namespace = "claudony")`.
+
+The `@DesiredStateQualifier` annotation (from `casehub-desiredstate-annotations`) is required by ARC42STORIES §2: GoalCompiler ambiguity across coexisting domain modules is resolved via this CDI qualifier. Existing domain GoalCompilers (`DeploymentGoalCompiler`, `ComplianceGoalCompiler`, `InfraGoalCompiler`) do not yet use the qualifier — adding it to claudony follows the documented architecture and sets the pattern. Backfilling the qualifier on existing compilers is out-of-scope for this issue.
 
 - Iterates `goals.apps()`: creates `DesiredNode` per app with `HumanGating.NONE`
 - Iterates `goals.pools()`: creates `DesiredNode` per pool, auto-adds `Dependency(poolId, appId)` linking each pool to its parent app via `poolSpec.appName()`
@@ -129,19 +135,19 @@ All five SPI beans in `io.casehub.ops.claudony`.
 
 ### ClaudonyActualStateAdapter
 
-`ActualStateAdapter`, `@ApplicationScoped`. Injects `ClaudonyFleetClient` and `SpecHashStore`.
+`ActualStateAdapter`, `@ApplicationScoped`. Injects `ClaudonyFleetClient` and `ClaudonySpecHashStore`.
 
 `handledTypes()` returns `{CLAUDONY_APP, CLAUDONY_POOL}`.
 
 `readActual()`:
-1. Batch query: `fleetClient.listApps(tenancyId)` where tenancyId maps to namespace
+1. Batch query: `fleetClient.listApps(tenancyId)` — identity mapping: tenancyId IS the claudony namespace. Each reconciliation tenant corresponds directly to a claudony namespace. This matches the claudony fleet model where apps are partitioned by namespace.
 2. Build `Map<String, ClaudonyAppInfo>` by app name
 3. For each desired `claudony_app` node: look up by name, map `HealthStatus` to `NodeStatus` via `ClaudonyHealthMapper.toNodeStatus()`. Layer spec-hash check for declaration drift.
 4. For each desired `claudony_pool` node: look up parent app by `appName`, find matching pool by `agentId` in `app.pools()`. ABSENT if parent app missing or pool not found. DRIFTED if `minActive`/`maxActive` differ from desired. PRESENT otherwise. Spec-hash layer on top.
 
 ### ClaudonyNodeProvisioner
 
-`NodeProvisioner`, `@ApplicationScoped`. Injects `ClaudonyFleetClient` and `SpecHashStore`.
+`NodeProvisioner`, `@ApplicationScoped`. Injects `ClaudonyFleetClient` and `ClaudonySpecHashStore`.
 
 `handledTypes()` returns `{CLAUDONY_APP, CLAUDONY_POOL}`.
 `supportsStatefulLifecycle()` returns `true`.
@@ -165,14 +171,40 @@ All five SPI beans in `io.casehub.ops.claudony`.
 Delegates to `ThresholdFaultPolicy` configured with:
 - Fault types: `PROVISION_FAILED`
 - Node types: `CLAUDONY_APP`, `CLAUDONY_POOL`
-- Ignore types: `claudony_review` (prevents infinite escalation)
-- Tier 3 threshold: after 3 failures, adds a `ClaudonyReviewSpec` review node via `FaultPolicy.addReviewNode()`
+- Ignore types: `Set.of(NodeType.of("claudony_review"))` — belt-and-suspenders, matching `ContainerFaultPolicy` pattern. `ThresholdFaultPolicy` automatically adds tier output types to `ignoreTypes`, so this is technically redundant but consistent with existing code.
+- Tier 3 threshold: after 3 failures, adds a `ClaudonyReviewSpec` review node via `FaultPolicy.addReviewNode((event, current) -> new ClaudonyReviewSpec(event.node(), event.detail()))`
 
 ### ClaudonyEventSource
 
 `EventSource`, `@ApplicationScoped`.
 
 Hot `Multi<StateEvent>` via emitter with broadcast to all subscribers. Exposes `emit(StateEvent)` and convenience `emitDrift(NodeId)` for external callers. Follows `ContainerEventSource` pattern.
+
+### DomainRegistration (in BootstrapDomainRegistrar)
+
+The claudony domain must be registered with `CrossDomainCompositionEngine` for cross-domain ordering. Following the established pattern in `BootstrapDomainRegistrar` (service module), a new `registerClaudonyDomain()` method:
+
+```java
+engine.registerDomain(DomainRegistration.builder(DomainId.of("claudony"),
+    CompilationResult.single(emptyGraph))
+    .provides(Set.of(ClaudonyNodeTypes.APP, ClaudonyNodeTypes.POOL))
+    .build());
+```
+
+- `provides`: `claudony_app`, `claudony_pool` — the two goal-compiled node types
+- `requires`: empty — claudony fleet management is standalone, no dependency on infrastructure or other domains
+- `claudony_review` is NOT in `provides`: review nodes are fault-policy artifacts, not goal-compiled resources
+
+Registration is centralized in `BootstrapDomainRegistrar`, not in the claudony domain module itself — this matches the existing pattern for infra and deployment domains.
+
+### Heartbeat Integration
+
+`ClaudonyFleetClient.heartbeat(String name)` is intentionally NOT called by `ClaudonyActualStateAdapter` or `ClaudonyNodeProvisioner`. The heartbeat endpoint is a claudony API feature for keeping apps alive during idle periods. In the desiredstate model, app liveness is managed declaratively:
+- Present apps remain registered via their `ClaudonyAppNodeSpec` in the desired graph
+- Absent apps are deprovisioned via `deregisterApp()`
+- The reconciliation loop's continuous cycling inherently keeps the system active
+
+If claudony adds idle-timeout semantics in the future, heartbeat integration would be a separate concern — likely a periodic CDI `@Scheduled` task calling `heartbeat()` for all registered apps, not a side-effect of `readActual()`.
 
 ### ClaudonyNodeSpecFactoryProvider
 
@@ -181,6 +213,24 @@ Hot `Multi<StateEvent>` via emitter with broadcast to all subscribers. Exposes `
 Scans `ClaudonyNodeSpec.class.getPermittedSubclasses()` for `@NodeTypeId` annotations, registers Jackson `ObjectMapper.convertValue()` deserialization factories. Follows `ContainerNodeSpecFactoryProvider` pattern.
 
 ## Shared Utilities
+
+### ClaudonySpecHashStore
+
+`@ApplicationScoped`. Module-local spec hash store for the claudony domain. Identical to `SpecHashStore` (deployment) and `ComplianceSpecHashStore` (compliance) — each domain module has its own CDI-scoped instance. The claudony module cannot inject the deployment module's `SpecHashStore` as that would create a cross-module dependency.
+
+```java
+@ApplicationScoped
+public class ClaudonySpecHashStore {
+    private final ConcurrentHashMap<NodeId, Integer> hashes = new ConcurrentHashMap<>();
+
+    public void record(NodeId id, NodeSpec spec) { hashes.put(id, spec.hashCode()); }
+    public void remove(NodeId id) { hashes.remove(id); }
+    public boolean hasDrifted(NodeId id, NodeSpec spec) {
+        Integer stored = hashes.get(id);
+        return stored == null || !stored.equals(spec.hashCode());
+    }
+}
+```
 
 ### ClaudonyHealthMapper
 
@@ -228,14 +278,15 @@ Test stubs implement `ClaudonyFleetClient` interface directly (already an interf
 | Location | Artifact |
 |----------|----------|
 | `api/src/main/java/io/casehub/ops/api/claudony/` | `ClaudonyNodeSpec`, `ClaudonyAppNodeSpec`, `ClaudonyPoolNodeSpec`, `ClaudonyNodeTypes`, `ClaudonyGoalEntry`, `ClaudonyGoals`, `ClaudonyReviewSpec` |
-| `claudony/src/main/java/io/casehub/ops/claudony/` | `ClaudonyGoalCompiler`, `ClaudonyActualStateAdapter`, `ClaudonyNodeProvisioner`, `ClaudonyFaultPolicy`, `ClaudonyEventSource`, `ClaudonyNodeSpecFactoryProvider`, `ClaudonyGoalLoader`, `ClaudonyHealthMapper` |
+| `claudony/src/main/java/io/casehub/ops/claudony/` | `ClaudonyGoalCompiler`, `ClaudonyActualStateAdapter`, `ClaudonyNodeProvisioner`, `ClaudonyFaultPolicy`, `ClaudonyEventSource`, `ClaudonyNodeSpecFactoryProvider`, `ClaudonyGoalLoader`, `ClaudonyHealthMapper`, `ClaudonySpecHashStore` |
+| `service/src/main/java/.../bootstrap/` | Update `BootstrapDomainRegistrar` — add `registerClaudonyDomain()` |
 | `claudony/src/test/java/io/casehub/ops/claudony/` | Unit tests, integration test, extended HTTP client test |
 
 ### Documentation
 
 | Artifact | Action |
 |----------|--------|
-| ADR-0003 | New ADR superseding ADR-0002 for fleet management use case |
+| ADR-0003 | New ADR establishing standalone SPI Quad for claudony fleet management alongside ADR-0002 |
 | ARC42STORIES.MD | Update section 5 (Building Block View) to include claudony domain module, update section 4 with claudony type strategy |
 | Consumer guide | Document claudony fleet YAML format and boundary with deployment module |
 
@@ -246,15 +297,23 @@ Test stubs implement `ClaudonyFleetClient` interface directly (already an interf
 | Standalone pool CRUD endpoints | `POST/DELETE /api/claudony/apps/{name}/pools/{agentId}` — future improvement to replace read-modify-write |
 | ETag/version support on app specs | Enables optimistic concurrency for read-modify-write bridge |
 
+### casehub-ops issues to file
+
+| Issue | Purpose |
+|-------|---------|
+| Backfill `@DesiredStateQualifier` on existing GoalCompilers | `DeploymentGoalCompiler`, `ComplianceGoalCompiler`, `InfraGoalCompiler` need the qualifier per ARC42STORIES §2 |
+| Promote `SpecHashStore` to shared utility or extract interface | Three identical copies (deployment, compliance, claudony) — candidate for consolidation in `api/` or `casehub-desiredstate-api` |
+
 ## Trade-offs
 
 - **Dual paths to ClaudonyFleetClient**: An app declared as both `casehub_application` (deployment) and `claudony_app` (fleet) would conflict. Operational misconfiguration, not architectural flaw. Documented in consumer guide.
-- **Read-modify-write for pools**: Provisioning a pool requires reading and writing the entire app spec. Sequential reconciliation prevents races within the loop, but external mutations could be overwritten. Acceptable for expected scale; standalone pool endpoints (claudony issue) are the long-term fix.
+- **Read-modify-write for pools**: Provisioning a pool requires reading and writing the entire app spec. Within a single tenant's reconciliation loop, processing is sequential — no intra-tenant race. Cross-tenant races on the same app are impossible because apps are partitioned by namespace (= tenancyId). However, external mutations (via claudony UI or another process) between `getApp()` and `updateApp()` ARE silently overwritten. Concrete failure mode: operator modifies pool config via claudony dashboard, next reconciliation cycle overwrites with desired state. This is the correct desired-state behavior (desired state wins), but the operator must understand that manual pool changes are ephemeral. Standalone pool endpoints (claudony issue) with ETag support are the long-term fix for finer-grained mutation.
+- **No approval workflow**: The claudony domain deliberately omits `ApprovalEvaluator` integration. Fleet operations (app registration, pool scaling) are operational, not change-managed. `PlanStoreMapper` mixin updates are therefore not required — claudony `NodeSpec` subtypes will never pass through the approval pipeline. If approval is needed in the future, `PlanStoreMapper` mixin registration for `ClaudonyNodeSpec` subtypes would be required (ARC42STORIES §12 Technical Debt).
 - **Two node types inline in adapter/provisioner**: If the claudony domain grows beyond 2-3 node types, the inline switch pattern may need refactoring to the drift checker / handler class pattern.
 
 ## References
 
-- `docs/adr/0002-claudony-integration-via-deployment-target.md` — ADR being superseded for fleet management
+- `docs/adr/0002-claudony-integration-via-deployment-target.md` — companion ADR for deployment target pattern (remains valid)
 - `ARC42STORIES.MD` section 4 — type strategy selection rationale
 - `ARC42STORIES.MD` section 8 — SPI Quad pattern
 - `container/src/main/java/io/casehub/ops/container/ContainerGoalCompiler.java` — closest structural analogue for GoalCompiler
