@@ -1,3 +1,16 @@
+## D0: Claudony as separate desiredstate domain — supersedes ADR-0002 for fleet management
+
+**Choice:** Claudony becomes its own desiredstate domain module with disjoint node types (`claudony_app`, `claudony_pool`), complementing the existing `ClaudonyDeploymentTarget` which remains as the deployment module's multi-target bridge.
+**Alternatives:**
+- Extend the deployment domain — add claudony fleet management within the existing deployment module via `PoolOperations` SPI and enriched drift checkers. Rejected: fleet-wide declarative management is a different operational concern from "deploy this CaseHub app to one of N targets." Mixing both in the deployment module conflates two domains.
+- Replace ClaudonyDeploymentTarget — remove it, route everything through the new domain. Rejected: deployment module's multi-target routing (`deploymentTargetId`) serves a different use case (ad-hoc app deployment) that should remain.
+**Rationale:** ADR-0002 (2026-10-14) correctly rejected a standalone provisioner for `casehub_application` nodes — those MUST go through the deployment module's multi-target routing to avoid `handledTypes()` collision. Issue #140 introduces a DIFFERENT use case: declarative fleet management with new node types (`claudony_app`, `claudony_pool`) that are disjoint from deployment's types. No type collision, no router conflict. The two layers serve different callers: deployment module deploys individual CaseHub apps to claudony as one of several targets; claudony domain declares "these apps and pools should exist in the fleet" and reconciles the whole fleet state.
+**Trade-offs:** Dual paths to the same `ClaudonyFleetClient` — an app declared as both `casehub_application` (deployment) and `claudony_app` (fleet) would conflict. This is an operational misconfiguration, not an architectural flaw, same as declaring an infra resource in two YAML files. Documentation must make the boundary clear.
+**ADR action:** Supersede ADR-0002 with a new ADR acknowledging the complementary pattern. ADR-0002's decision remains valid for the deployment module's multi-target use case; this decision extends the architecture for fleet management.
+**Sources:** ADR-0002 (docs/adr/0002-claudony-integration-via-deployment-target.md), DefaultNodeProvisionerRouter type collision constraint, CrossDomainCompositionEngine
+**Exploration:** deep-analysis (surfaced by decision review, not initially explored)
+**Status:** captured
+
 ## D1: NodeSpec type strategy
 
 **Choice:** Sealed interface — `ClaudonyNodeSpec` sealed interface permitting `ClaudonyAppNodeSpec` and `ClaudonyPoolNodeSpec`
