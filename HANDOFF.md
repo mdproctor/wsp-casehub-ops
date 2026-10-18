@@ -1,55 +1,42 @@
-# Handover — Topology Compiler Service landed
+# Handover — Claudony desiredstate domain landed
 
-**Branch:** `main` (clean — `issue-179-topology-compiler-service` landed as `0c437be`)
-**Closed this session:** #179 (topology compiler service facade), #180 (PodmanDeploymentTarget CDI fix), #164 (epic: rewrite YAML/README to methodology)
-**Next work:** #140 (claudony NodeProvisioner — M/Med)
+**Branch:** `main` (clean — `issue-140-claudony-desiredstate-spi` landed as `abcefb8`)
+**Closed this session:** #140 (claudony desiredstate domain — full SPI Quad)
 
-## What was done this session
+## What was done
 
-### Implementation — #179, #180 (landed as single squashed commit)
+Claudony became a standalone desiredstate domain with full SPI Quad: GoalCompiler, ActualStateAdapter, NodeProvisioner, FaultPolicy, EventSource, plus GoalLoader and NodeSpecFactoryProvider. Two node types (`claudony_app`, `claudony_pool`) as a sealed hierarchy in ops-api. Coexists with `ClaudonyDeploymentTarget` (ADR-0002) — different concern, different callers.
 
-**TopologyCompilerService** (`service/src/main/java/.../topology/`) — composition-aware facade for the scaffold console:
-- `deploy(tenancyId, basePath, topologyName)` — compile YAML → compose graph → start ReconciliationLoop
-- `listTopologiesFromPath(path)` — scan filesystem for topology directories
-- `compileDomain(yamlPath, typeRegistry)` — parse YAML via YamlGraphRecorder
-- `stop(tenancyId, topologyName)` / `isRunning(tenancyId, topologyName)` — lifecycle management
-- Loop key format: `topology:<tenancyId>:<topologyName>` (mutually exclusive with K8s path)
+Key design decisions:
+- **D0:** Claudony as separate domain (ADR-0003 complements ADR-0002)
+- **D1:** Sealed hierarchy for app/pool (different fields, different provisioning)
+- **D4:** Pools provisioned via read-modify-write on parent app spec (bridge until claudony adds pool CRUD)
 
-**NodeTypeRegistryProducer** — discovers node types via sealed interface `@NodeTypeId` scanning + `NodeSpecFactoryProvider` collection (CDI or explicit varargs)
+ADR-0003 written. ARC42STORIES, consumer guide, CLAUDE.md updated. 73 tests in claudony module.
 
-**PodmanDeploymentTarget** — added `@ApplicationScoped` + `@Inject`. No `@LookupIfProperty` — all deployment targets must be CDI beans simultaneously for per-node routing via `targetId()`.
+## Issues filed
 
-**Topology YAML packaging** — `01-hello-llm` shipped in `META-INF/desiredstate/topologies/`. Dev default: `%dev.casehub.ops.deployment.target=in-process`.
+- claudony#290 — standalone pool CRUD endpoints
+- claudony#291 — ETag/version support on app specs
+- ops#181 — backfill `@DesiredStateQualifier` on existing GoalCompilers
+- ops#182 — promote SpecHashStore to shared utility
 
-14 unit tests, 585-test full build green.
+## Forage candidates (garden was down)
 
-### Design decisions (spec at `specs/issue-179-topology-compiler-service/`)
+- `CompilationResult` has no `graphs()` — must cast to `SingleGraph` and call `graph()`
+- Context constructors (`ProvisionContext`, `SuspendContext`, etc.) require non-null graph
+- `casehub-desiredstate-annotations` is not transitive through `desiredstate-api`
+- `CrossDomainCompositionEngine` sorts domains with no `requires` before those that have them
 
-- D1: Composition-aware — each YAML is a domain contribution, not standalone
-- D2: Two-level API — high-level `deploy()` + low-level steps
-- D3: Dual type discovery — sealed scanning + NodeSpecFactoryProvider (both paths)
-- D4: META-INF/desiredstate/topologies/ with filesystem override
-- D5: Explicit API only (no auto-start on boot)
-- D6: @ApplicationScoped only, no @LookupIfProperty
+## Next candidates
 
-### Epic closure
+- **#181** (XS/Low) — backfill `@DesiredStateQualifier` on existing GoalCompilers
+- **#182** (S/Low) — promote SpecHashStore to shared utility
 
-**#164 (Rewrite YAML/README to methodology)** — all children (#174, #175) complete. Closed.
+## References
 
-### Issue filed
-
-**Hortora/soredium#462** — `ctx.py` plan detection returns `HAS_PLAN=no` when `.plan` file exists. Reproducer: create `<branch-name>.plan` in workspace, run `plan_manager.py detect` — reports no plan. Workaround: pass `plan_path=` explicitly.
-
-## Known limitations
-
-- Factory-based type wrapping (InfraWrappingFactory, DeploymentNodeSpecFactoryProvider) not yet integrated into the `deploy()` compilation path. Sealed scanning finds the types but deserialization goes through Jackson rather than the domain-specific factories. Works for deployment topologies; infra nodes needing `backendId` wrapping will need `NodeSpecRegistry` integration.
-- `CrossDomainCompositionEngine` integration is architectural but not yet exercised in `deploy()` — current implementation merges graphs directly. The engine wire-up is designed but deferred until multi-domain topologies are needed.
-
-## Next session
-
-**#140 — claudony NodeProvisioner** (M/Med, unblocked):
-- `ClaudonyGoalCompiler` — compile YAML fleet declarations into DesiredStateGraph
-- `ClaudonyActualStateAdapter` — read live state from claudony registry API
-- `ClaudonyNodeProvisioner` — map desiredstate provision/deprovision/suspend/resume to claudony REST calls
-- Reference implementations: `CaseHubAppProvisionHandler`, `DeploymentActualStateAdapter` in ops/deployment
-- Cross-repo dep: claudony#282 (app lifecycle API — landed), platform#615 (HealthStatus.SUSPENDED — landed)
+- Design spec: `wksp specs/issue-140-claudony-nodeprovisioner/2026-10-18-claudony-desiredstate-spi-design.md`
+- Decisions: `wksp specs/issue-140-claudony-nodeprovisioner/decisions.md`
+- Plan: `wksp plans/2026-10-18-claudony-desiredstate-spi.md`
+- ADR: `docs/adr/0003-claudony-desiredstate-domain.md`
+- Diary: `wksp blog/2026-10-18-mdp01-two-paths-to-the-same-fleet.md`
