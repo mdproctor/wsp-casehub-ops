@@ -1,68 +1,55 @@
-# Handover — Ready for Operations arc (Levels 05-08)
+# Handover — Topology Compiler Service landed
 
-**Branch:** `main` (clean — previous branch landed)
-**Closed this session:** #133 (Level 04 fleet scaling), #143 (LLM identity test)
-**Next work:** Operations arc — levels 05-08 (#134, #135, #136, #137)
+**Branch:** `main` (clean — `issue-179-topology-compiler-service` landed as `0c437be`)
+**Closed this session:** #179 (topology compiler service facade), #180 (PodmanDeploymentTarget CDI fix), #164 (epic: rewrite YAML/README to methodology)
+**Next work:** #140 (claudony NodeProvisioner — M/Med)
 
 ## What was done this session
 
-### Implementation
+### Implementation — #179, #180 (landed as single squashed commit)
 
-1. **#143 — End-to-end LLM identity test** (completed and landed)
-   - `LlmIdentityTest.java` — 7 tests proving config → descriptor → briefing → LLM identity
-   - Added `casehub-eidos-core` test dependency
-   - Bug fix: separated `llm.model-tier` from `llm.capability` in descriptor YAML
-   - All 3 integration-live tests pass against Ollama
+**TopologyCompilerService** (`service/src/main/java/.../topology/`) — composition-aware facade for the scaffold console:
+- `deploy(tenancyId, basePath, topologyName)` — compile YAML → compose graph → start ReconciliationLoop
+- `listTopologiesFromPath(path)` — scan filesystem for topology directories
+- `compileDomain(yamlPath, typeRegistry)` — parse YAML via YamlGraphRecorder
+- `stop(tenancyId, topologyName)` / `isRunning(tenancyId, topologyName)` — lifecycle management
+- Loop key format: `topology:<tenancyId>:<topologyName>` (mutually exclusive with K8s path)
 
-2. **Closed branch `issue-133-fleet-scaling-3-llm`** — squashed to 3 commits, landed on main
+**NodeTypeRegistryProducer** — discovers node types via sealed interface `@NodeTypeId` scanning + `NodeSpecFactoryProvider` collection (CDI or explicit varargs)
 
-### Planning — topology levels roadmap
+**PodmanDeploymentTarget** — added `@ApplicationScoped` + `@Inject`. No `@LookupIfProperty` — all deployment targets must be CDI beans simultaneously for per-node routing via `targetId()`.
 
-Designed the full 18-level progression and filed 17 new issues:
+**Topology YAML packaging** — `01-hello-llm` shipped in `META-INF/desiredstate/topologies/`. Dev default: `%dev.casehub.ops.deployment.target=in-process`.
 
-**New topology levels:**
-- #146 Level 10: Pool deployment — managed claudony instance pool
-- #147 Level 11: Blocks use case — logistics summariser
-- #148 Level 12: Ad-hoc LLM deployer — runtime deployment via RAS input
-- #149 Level 13: Agentic mesh — multi-agent delegation and communication
-- #154 Level 14: Fault recovery — automatic detection and replacement
-- #155 Level 15: Multi-tenancy — same topology, isolated tenants
-- #156 Level 16: Security — service-to-service auth and credential injection
-- #157 Level 17: Compliance posture — continuous monitoring and remediation
-- #158 Level 18: Full platform — all modules, all services, everything installed
+14 unit tests, 585-test full build green.
 
-**Multi-environment epic #150:**
-- #151 Environment abstraction layer
-- #152 Kubernetes provisioner (k3d/kind)
-- #153 Podman provisioner
-- #160 Dual-runtime (deploy as Quarkus and Spring — proves framework neutrality)
+### Design decisions (spec at `specs/issue-179-topology-compiler-service/`)
 
-**Tooling:**
-- #159 Showcase UI — run levels from ops app with live results
-- #161 Fleet observability UI — live monitoring of deployed topology
+- D1: Composition-aware — each YAML is a domain contribution, not standalone
+- D2: Two-level API — high-level `deploy()` + low-level steps
+- D3: Dual type discovery — sealed scanning + NodeSpecFactoryProvider (both paths)
+- D4: META-INF/desiredstate/topologies/ with filesystem override
+- D5: Explicit API only (no auto-start on boot)
+- D6: @ApplicationScoped only, no @LookupIfProperty
 
-**Updated:**
-- #131 epic — 18 levels grouped by narrative arc + operational assertions principle
-- #137 Level 08 — expanded from "add RAS" to full observability (RAS, health, metrics, application signals)
+### Epic closure
 
-### Key design decisions
+**#164 (Rewrite YAML/README to methodology)** — all children (#174, #175) complete. Closed.
 
-- **Levels are both tutorial and smoke test** — each asserts its runtime capability works end-to-end (deploy → exercise → assert outcome → assert audit)
-- **Infrastructure not a level** — dropped "Level 18: Infrastructure" since drift detection (05) and governance gates (02) already demonstrate the concept
-- **Dual-runtime as a smoke test** — deploying same topology on Quarkus and Spring proves domain modules are framework-neutral. If CDI leaked into core logic, the Spring build fails — that IS the test
-- **Level 09 (Chat UI) flagged** as a standalone app — may need reclassifying out of the level progression
+### Issue filed
 
-## Roadmap doc
+**Hortora/soredium#462** — `ctx.py` plan detection returns `HAS_PLAN=no` when `.plan` file exists. Reproducer: create `<branch-name>.plan` in workspace, run `plan_manager.py detect` — reports no plan. Workaround: pass `plan_path=` explicitly.
 
-`docs/topology-levels-roadmap.md` in workspace — full graph with status, narrative arcs, operational assertions principle.
+## Known limitations
+
+- Factory-based type wrapping (InfraWrappingFactory, DeploymentNodeSpecFactoryProvider) not yet integrated into the `deploy()` compilation path. Sealed scanning finds the types but deserialization goes through Jackson rather than the domain-specific factories. Works for deployment topologies; infra nodes needing `backendId` wrapping will need `NodeSpecRegistry` integration.
+- `CrossDomainCompositionEngine` integration is architectural but not yet exercised in `deploy()` — current implementation merges graphs directly. The engine wire-up is designed but deferred until multi-domain topologies are needed.
 
 ## Next session
 
-Start the Operations arc (levels 05-08). Recommended order:
-
-1. **#134 Level 05: Config drift** — S/Med, builds directly on Level 04 fleet
-2. **#135 Level 06: Lifecycle** — S/Med, suspend/resume the fleet
-3. **#136 Level 07: Topology mutations** — S/Med, add/remove apps
-4. **#137 Level 08: Fleet observability** — M/Med, full signal chain
-
-These can share a branch since they're an incremental progression on the same fleet. Create a new branch covering all four, or one per level — user's choice.
+**#140 — claudony NodeProvisioner** (M/Med, unblocked):
+- `ClaudonyGoalCompiler` — compile YAML fleet declarations into DesiredStateGraph
+- `ClaudonyActualStateAdapter` — read live state from claudony registry API
+- `ClaudonyNodeProvisioner` — map desiredstate provision/deprovision/suspend/resume to claudony REST calls
+- Reference implementations: `CaseHubAppProvisionHandler`, `DeploymentActualStateAdapter` in ops/deployment
+- Cross-repo dep: claudony#282 (app lifecycle API — landed), platform#615 (HealthStatus.SUSPENDED — landed)
