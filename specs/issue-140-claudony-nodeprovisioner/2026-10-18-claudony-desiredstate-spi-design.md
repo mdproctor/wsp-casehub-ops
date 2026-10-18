@@ -77,16 +77,27 @@ public final class ClaudonyNodeTypes {
 }
 ```
 
+### ClaudonyGoalEntry
+
+```java
+@JsonIgnoreProperties(ignoreUnknown = true)
+public record ClaudonyGoalEntry<S extends ClaudonyNodeSpec>(S spec, List<String> dependsOn) {
+    public ClaudonyGoalEntry {
+        dependsOn = dependsOn != null ? List.copyOf(dependsOn) : List.of();
+    }
+}
+```
+
+Each domain defines its own goal entry type (`GoalEntry` is bound to `DeploymentNodeSpec`, `ComplianceGoalEntry` is compliance-specific).
+
 ### ClaudonyGoals
 
 ```java
 public record ClaudonyGoals(
-    List<GoalEntry<ClaudonyAppNodeSpec>> apps,
-    List<GoalEntry<ClaudonyPoolNodeSpec>> pools
+    List<ClaudonyGoalEntry<ClaudonyAppNodeSpec>> apps,
+    List<ClaudonyGoalEntry<ClaudonyPoolNodeSpec>> pools
 ) {}
 ```
-
-Reuses `GoalEntry` from the deployment module for `dependsOn` edge support.
 
 ### ClaudonyReviewSpec
 
@@ -216,7 +227,7 @@ Test stubs implement `ClaudonyFleetClient` interface directly (already an interf
 
 | Location | Artifact |
 |----------|----------|
-| `api/src/main/java/io/casehub/ops/api/claudony/` | `ClaudonyNodeSpec`, `ClaudonyAppNodeSpec`, `ClaudonyPoolNodeSpec`, `ClaudonyNodeTypes`, `ClaudonyGoals`, `ClaudonyReviewSpec` |
+| `api/src/main/java/io/casehub/ops/api/claudony/` | `ClaudonyNodeSpec`, `ClaudonyAppNodeSpec`, `ClaudonyPoolNodeSpec`, `ClaudonyNodeTypes`, `ClaudonyGoalEntry`, `ClaudonyGoals`, `ClaudonyReviewSpec` |
 | `claudony/src/main/java/io/casehub/ops/claudony/` | `ClaudonyGoalCompiler`, `ClaudonyActualStateAdapter`, `ClaudonyNodeProvisioner`, `ClaudonyFaultPolicy`, `ClaudonyEventSource`, `ClaudonyNodeSpecFactoryProvider`, `ClaudonyGoalLoader`, `ClaudonyHealthMapper` |
 | `claudony/src/test/java/io/casehub/ops/claudony/` | Unit tests, integration test, extended HTTP client test |
 
@@ -254,7 +265,7 @@ Test stubs implement `ClaudonyFleetClient` interface directly (already an interf
 - `claudony/src/main/java/io/casehub/ops/claudony/ClaudonyFleetClient.java` — existing REST client interface
 - `claudony/src/main/java/io/casehub/ops/claudony/ClaudonyDeploymentTarget.java` — existing deployment target (coexists)
 - `claudony/src/main/java/io/casehub/ops/claudony/ClaudonyAppSpec.java` — claudony API data types
-- `api/src/main/java/io/casehub/ops/api/deployment/GoalEntry.java` — reused for dependsOn edges
+- `api/src/main/java/io/casehub/ops/api/compliance/ComplianceGoalEntry.java` — per-domain goal entry precedent
 - casehubio/casehub-ops#140 — parent issue
 - claudony#282 — app lifecycle API (landed)
 - platform#615 — HealthStatus.SUSPENDED (landed)
