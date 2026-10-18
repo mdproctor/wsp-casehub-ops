@@ -2,7 +2,7 @@
 
 ## State
 branch: issue-182-promote-spec-hash-store
-state: closing:promoted
+state: closing:stamped
 project-sha: 
 date: 
 issue-repo: casehubio/casehub-ops
