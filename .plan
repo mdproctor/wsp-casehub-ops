@@ -1,0 +1,15 @@
+# Work Plan — issue-166-topology-test-infra-methodology
+
+## State
+branch: issue-166-topology-test-infra-methodology
+state: scaffolded
+project-sha: 
+date: 
+issue-repo: casehubio/casehub-ops
+covers: 166,174,175
+design-repo: 
+design-section-hashes: 
+flyway-next-v: none
+
+## Queue
+- [ ] casehubio/casehub-ops#166 — Issue #166 ← active
