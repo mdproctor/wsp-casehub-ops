@@ -41,7 +41,6 @@ Sealed hierarchy follows ARC42STORIES section 4 Type Strategy Selection: apps an
 @NodeTypeId("claudony_app")
 public record ClaudonyAppNodeSpec(
     String name,
-    String namespace,
     String displayName,
     String description,
     String image,
@@ -53,6 +52,8 @@ public record ClaudonyAppNodeSpec(
 ```
 
 Not a duplicate of `CaseHubApplicationSpec`. Different domain model: no `source`, `runtime`, `dependencies`, `replicas`. Claudony uses pools (separate nodes), not replicas.
+
+**No `namespace` field.** The claudony API namespace is determined by the reconciliation context (tenancyId), not the YAML declaration. The provisioner sets `namespace = tenancyId` when building `ClaudonyAppSpec`. This ensures coherence: the adapter searches `listApps(tenancyId)` in the same namespace the provisioner registers apps in. Without this enforcement, a YAML author setting `namespace: production` while the reconciliation loop runs as `tenancyId=staging` would cause silent infinite re-provisioning (app registered in `production`, adapter searching `staging` → perpetual ABSENT). This matches the existing `ClaudonyDeploymentTarget.toAppSpec()` which passes `null` for namespace (line 110), letting the deployment context determine placement.
 
 ### ClaudonyPoolNodeSpec
 
@@ -153,12 +154,12 @@ The `@DesiredStateQualifier` annotation (from `casehub-desiredstate-annotations`
 `supportsStatefulLifecycle()` returns `true`.
 
 **provision()** — switch on spec type:
-- `ClaudonyAppNodeSpec`: build `ClaudonyAppSpec` (no pools list — pools are separate nodes), call `registerApp()`. On 409 conflict, fall back to `updateApp()`. Record spec hash on success.
-- `ClaudonyPoolNodeSpec`: read-modify-write. `getApp(appName)`, append/update pool in pools list, `updateApp()`. Record spec hash on success.
+- `ClaudonyAppNodeSpec`: build `ClaudonyAppSpec` with `namespace = context.tenancyId()` (no pools list — pools are separate nodes), call `registerApp()`. On 409 conflict, fall back to `updateApp()`. Record spec hash on success.
+- `ClaudonyPoolNodeSpec`: read-modify-write. `getApp(appName)` — if `Optional.empty()`, return `ProvisionResult.Failed("parent app not registered: " + appName)` without attempting the read-modify-write. Otherwise, append/update pool in pools list, `updateApp()`. Record spec hash on success. (The pool → app dependency edge prevents this case during normal ordering, but the guard handles cross-cycle edge cases where app provision fails repeatedly.)
 
 **deprovision()**:
 - `ClaudonyAppNodeSpec`: `deregisterApp(name)`. 404 treated as success. Remove spec hash.
-- `ClaudonyPoolNodeSpec`: read-modify-write. `getApp(appName)`, remove pool from list, `updateApp()`. Remove spec hash.
+- `ClaudonyPoolNodeSpec`: read-modify-write. `getApp(appName)` — if `Optional.empty()`, treat as success (parent app gone implies pool is gone). Otherwise, remove pool from list, `updateApp()`. Remove spec hash.
 
 **suspend() / resume()**:
 - `ClaudonyAppNodeSpec`: `suspendApp(name)` / `resumeApp(name)`
@@ -253,11 +254,14 @@ Both `ClaudonyDeploymentTarget` and `ClaudonyActualStateAdapter` delegate to thi
 
 ### ClaudonyGoalLoader
 
-Follows established pattern (`DeploymentGoalLoader`, `ComplianceGoalLoader`):
+Standalone domain goal loader following `DeploymentGoalLoader` / `ComplianceGoalLoader` pattern. `@ApplicationScoped`.
+
 - Classpath-first resource lookup, filesystem fallback
 - Loads `claudony-fleet.yaml` files
-- Parses into `ClaudonyGoals` record
-- Integrates with `TopologyCompilerService` via `NodeSpecFactoryProvider` registration
+- Parses into `ClaudonyGoals` record via Jackson YAML mapper
+- Directory-based merging of multiple YAML files into one `ClaudonyGoals` record
+
+This is Path 2 (domain-specific YAML format) — not the standard `desiredState:` YAML format processed by `TopologyCompilerService` / `YamlDesiredStateProcessor`. `ClaudonyNodeSpecFactoryProvider` independently handles Path 1 (standard topology YAML) by providing node type factories for `claudony_app` and `claudony_pool` — the two paths are complementary but separate.
 
 ## Test Strategy
 
