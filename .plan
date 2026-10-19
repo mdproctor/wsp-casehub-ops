@@ -2,7 +2,7 @@
 
 ## State
 branch: issue-177-first-use-case-level
-state: active
+state: closing:review
 project-sha: 79c6dad4983ab37df5424ba1aec24341de492f4d
 date: 2026-10-19
 issue-repo: casehubio/casehub-ops
@@ -11,6 +11,7 @@ design-repo: project
 design-section-hashes: 
 flyway-next-v: unknown
 
+evidence-era: true
 ## Queue
 - [ ] casehubio/casehub-ops#177 — Issue #177 ← active
   - [x] Batch 1: UC04
