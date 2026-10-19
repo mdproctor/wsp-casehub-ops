@@ -13,7 +13,7 @@ flyway-next-v: unknown
 
 ## Queue
 - [ ] casehubio/casehub-ops#177 — Issue #177 ← active
-  - [ ] Batch 1: UC04
-    - [ ] Task 1: Write compilation tests
-    - [ ] Task 2: Create YAML topology file
-    - [ ] Task 3: Write README narrative
+  - [x] Batch 1: UC04
+    - [x] Task 1: Write compilation tests
+    - [x] Task 2: Create YAML topology file
+    - [x] Task 3: Write README narrative
