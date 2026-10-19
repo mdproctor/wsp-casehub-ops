@@ -2,7 +2,7 @@
 
 ## State
 branch: issue-177-first-use-case-level
-state: scaffolded
+state: active
 project-sha: 79c6dad4983ab37df5424ba1aec24341de492f4d
 date: 2026-10-19
 issue-repo: casehubio/casehub-ops
