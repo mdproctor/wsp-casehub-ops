@@ -1,0 +1,15 @@
+# Work Plan — issue-169-transition-planner-integration-test
+
+## State
+branch: issue-169-transition-planner-integration-test
+state: scaffolded
+project-sha: 
+date: 
+issue-repo: casehubio/casehub-ops
+covers: 169
+design-repo: 
+design-section-hashes: 
+flyway-next-v: 
+
+## Queue
+- [ ] casehubio/casehub-ops#169 — Issue #169 ← active
