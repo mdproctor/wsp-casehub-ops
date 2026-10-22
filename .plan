@@ -1,0 +1,15 @@
+# Work Plan — issue-173-audit-assertions-l01-l04
+
+## State
+branch: issue-173-audit-assertions-l01-l04
+state: scaffolded
+project-sha: 
+date: 
+issue-repo: casehubio/casehub-ops
+covers: 173
+design-repo: 
+design-section-hashes: 
+flyway-next-v: 
+
+## Queue
+- [ ] casehubio/casehub-ops#173 — Issue #173 ← active
