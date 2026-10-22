@@ -98,10 +98,13 @@ public final class AuditAssertions {
 
     // CloudEvent assertions
     public static void assertCloudEventEmitted(AuditCapture capture, String eventType);
-    public static void assertCloudEventEmitted(AuditCapture capture, String eventType, int count);
+    public static void assertCloudEventEmitted(AuditCapture capture, String eventType, int minCount);
     public static void assertCloudEventForNode(AuditCapture capture, String eventType, String nodeId);
     public static void assertNoCloudEventsOfType(AuditCapture capture, String eventType);
 }
+```
+
+`assertCloudEventForNode` extracts the nodeId from CloudEvent data using Jackson deserialization of `event.getData().toBytes()`. The desiredstate runtime emits CloudEvents with JSON data containing a `nodeId` field in `NODE_FAULTED`, `NODE_RECOVERED`, and `NODE_DRIFTED` events. `RECONCILIATION_COMPLETED` events contain aggregate data (additions count, faults count) without per-node fields — use `assertCloudEventEmitted` for those.
 ```
 
 ## Integration Patterns
