@@ -13,8 +13,8 @@ flyway-next-v:
 
 ## Queue
 - [ ] casehubio/casehub-ops#171 — Issue #171 ← active
-  - [ ] Batch 1: Audit infrastructure
-    - [ ] Task 1: AuditCapture + CapturingTransitionExecutor
-    - [ ] Task 2: AuditAssertions
-  - [ ] Batch 2: Base class integration
-    - [ ] Task 3: Wire AuditCapture into ReconciliationTestBase
+  - [x] Batch 1: Audit infrastructure
+    - [x] Task 1: AuditCapture + CapturingTransitionExecutor
+    - [x] Task 2: AuditAssertions
+  - [x] Batch 2: Base class integration
+    - [x] Task 3: Wire AuditCapture into ReconciliationTestBase
