@@ -85,7 +85,8 @@
 **Trade-offs:** Does not prove end-to-end audit trail existence at the topology test level. Trusts the CloudEvent boundary — if the right events are emitted with the right data, downstream consumers will process them correctly. This is validated by service/ module tests.
 **Sources:** ARC42STORIES.MD §2 Constraints ("testing/ is test-scope only — never compile or runtime"), ReconciliationTestBase.java (pure Java, no CDI), deployment-topology-tests spec (Level 02 scope), parent epic #163 step 4 ("Assert audit — verify ledger/work/RAS recorded the operation" — applies across the full test pyramid, not exclusively to topology tests)
 **Exploration:** surfaced by review
-**Status:** captured — implicit decision made explicit. The parent epic's "verify ledger/work/RAS" is satisfied across the test pyramid: topology tests verify signal production, service tests verify signal consumption.
+**Deferred scope:** Service-module audit consumption tests (verifying CDI interceptors correctly process CloudEvents into ledger entries, RAS events, and work audit records) are a separate concern not tracked by issues #171-#173. The parent epic's "verify ledger/work/RAS" requires both this infrastructure (signal production) and a future service-module counterpart (signal consumption) to be fully satisfied.
+**Status:** revised — added deferred scope note: service-module audit consumption tests are not tracked by this issue set
 
 ## D8: Assertion semantics for level authors
 
