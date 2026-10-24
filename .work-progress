@@ -42,3 +42,4 @@ notes=skipped
 handoff_write_attempt=1
 handoff_write=done
 handoff_write_produced=1
+refresh_cache_mechanical_attempt=1
