@@ -13,6 +13,8 @@
 
 All other topology levels (L01-L14) are pure YAML — the framework Java handles everything. Level 12 is the first requiring per-level Java (`AdhocLlmDeployerRecompiler`). #189 fixes this by making LLM-evaluated triggers a framework capability. Once landed, Level 12's Java recompiler is replaced by a YAML rule and removed. Nothing in the ops domain benefits from compiled Java speed — all hot paths are I/O-bound (provisioning, LLM calls).
 
+3. **Blog entry** written: "The LLM That Deploys LLMs" — covers the runtime proof, adaptation system discovery, YAML-first vs Java SPI contrast, and the path to #189. Two SVG diagrams (mutation flow, YAML-vs-Java comparison).
+
 ## Immediate Next Step
 
 `work start #189` — extend adaptation rule framework. L/High. Two framework changes needed:
