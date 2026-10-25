@@ -13,11 +13,5 @@ flyway-next-v:
 
 ## Queue
 - [ ] casehubio/casehub-ops#187 — Issue #187 ← active
-  - [x] Batch 1: ChannelNodeSpec+Provisioner+Drift
-    - [x] Task 1: Add protocols protocolParticipants policyOverrides to ChannelNodeSpec
-    - [x] Task 2: Wire ChannelProvisionHandler to use new fields
-    - [x] Task 3: Add drift detection for new fields
-    - [x] Task 4: YAML deserialization verification
-  - [x] Batch 2: Level 15 Tutorial
-    - [x] Task 5: Level 15 topology YAML and compilation test
-    - [x] Task 6: Full build verification
+  - [x] Batch 1: Live Integration
+    - [x] Task 1: Add langchain4j-jlama dependency and test skeleton
