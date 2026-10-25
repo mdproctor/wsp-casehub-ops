@@ -2,7 +2,7 @@
 
 ## State
 branch: issue-187-channel-patterns-topology
-state: active
+state: closing:review
 project-sha: 
 date: 
 issue-repo: casehubio/casehub-ops
@@ -11,6 +11,7 @@ design-repo:
 design-section-hashes: 
 flyway-next-v: 
 
+evidence-era: true
 ## Queue
 - [ ] casehubio/casehub-ops#187 — Issue #187 ← active
   - [x] Batch 1: Live Integration
