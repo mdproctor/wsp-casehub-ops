@@ -1,0 +1,15 @@
+# Work Plan — issue-187-channel-patterns-topology
+
+## State
+branch: issue-187-channel-patterns-topology
+state: scaffolded
+project-sha: 
+date: 
+issue-repo: casehubio/casehub-ops
+covers: 187,188
+design-repo: 
+design-section-hashes: 
+flyway-next-v: 
+
+## Queue
+- [ ] casehubio/casehub-ops#187 — Issue #187 ← active
