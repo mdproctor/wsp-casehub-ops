@@ -99,7 +99,13 @@ ops.setProtocolParticipants(channelId, spec.protocolParticipants());
 ops.setPolicyOverrides(channelId, spec.policyOverrides());
 ```
 
-**Replace semantics for policyOverrides:** Since qhorus `setPolicyOverrides()` merges (null-value = remove key), the provisioner computes the diff — keys present on the actual channel but absent from the spec are sent with null values to remove them. This gives replace semantics through the merge API.
+**Replace semantics for policyOverrides:** Since qhorus `setPolicyOverrides()` merges (null-value = remove key), the provisioner computes a synthetic diff to achieve replace semantics:
+
+1. Start with the desired map from the spec (or empty if null)
+2. For each key present on the actual channel but absent from the desired map, add an entry with null value (signals removal)
+3. Pass the combined map to `setPolicyOverrides()`
+
+If the spec's policyOverrides is null, pass null to `setPolicyOverrides()` (clears all overrides). This gives declarative replace semantics through the merge API.
 
 **ChannelOperations interface** gains three methods:
 
