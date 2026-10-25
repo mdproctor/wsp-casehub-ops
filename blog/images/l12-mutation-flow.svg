@@ -1,0 +1,75 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 720 340" font-family="system-ui, -apple-system, sans-serif" font-size="13">
+  <defs>
+    <marker id="arrow" markerWidth="8" markerHeight="6" refX="8" refY="3" orient="auto">
+      <path d="M0,0 L8,3 L0,6" fill="#475569"/>
+    </marker>
+    <marker id="arrow-blue" markerWidth="8" markerHeight="6" refX="8" refY="3" orient="auto">
+      <path d="M0,0 L8,3 L0,6" fill="#3b82f6"/>
+    </marker>
+  </defs>
+
+  <!-- Background -->
+  <rect width="720" height="340" rx="8" fill="#f8fafc" stroke="#e2e8f0"/>
+
+  <!-- Title -->
+  <text x="360" y="28" text-anchor="middle" font-size="15" font-weight="600" fill="#1e293b">SituationRecompiler Mutation Flow</text>
+
+  <!-- RAS Alert box -->
+  <rect x="20" y="50" width="130" height="50" rx="6" fill="#fef3c7" stroke="#d97706"/>
+  <text x="85" y="72" text-anchor="middle" font-weight="600" fill="#92400e" font-size="12">RAS Alert</text>
+  <text x="85" y="87" text-anchor="middle" fill="#92400e" font-size="11">product-x surge</text>
+
+  <!-- Arrow -->
+  <line x1="150" y1="75" x2="185" y2="75" stroke="#475569" stroke-width="1.5" marker-end="url(#arrow)"/>
+
+  <!-- SituationRecompiler -->
+  <rect x="190" y="45" width="160" height="60" rx="6" fill="#dbeafe" stroke="#3b82f6"/>
+  <text x="270" y="68" text-anchor="middle" font-weight="600" fill="#1e40af" font-size="12">SituationRecompiler</text>
+  <text x="270" y="84" text-anchor="middle" fill="#1e40af" font-size="11">evaluates situation</text>
+
+  <!-- Arrow to Deployer -->
+  <line x1="270" y1="105" x2="270" y2="135" stroke="#3b82f6" stroke-width="1.5" marker-end="url(#arrow-blue)"/>
+
+  <!-- Deployer LLM -->
+  <rect x="190" y="140" width="160" height="60" rx="6" fill="#ede9fe" stroke="#7c3aed"/>
+  <text x="270" y="163" text-anchor="middle" font-weight="600" fill="#5b21b6" font-size="12">Deployer LLM</text>
+  <text x="270" y="179" text-anchor="middle" fill="#5b21b6" font-size="11">selects specialist</text>
+
+  <!-- Arrow back up and right -->
+  <line x1="350" y1="170" x2="395" y2="170" stroke="#475569" stroke-width="1.5" marker-end="url(#arrow)"/>
+
+  <!-- Graph Mutation -->
+  <rect x="400" y="140" width="150" height="60" rx="6" fill="#dcfce7" stroke="#16a34a"/>
+  <text x="475" y="163" text-anchor="middle" font-weight="600" fill="#166534" font-size="12">Graph Mutation</text>
+  <text x="475" y="179" text-anchor="middle" fill="#166534" font-size="11">withNode() + dep</text>
+
+  <!-- Arrow -->
+  <line x1="550" y1="170" x2="575" y2="170" stroke="#475569" stroke-width="1.5" marker-end="url(#arrow)"/>
+
+  <!-- ReconciliationLoop -->
+  <rect x="580" y="140" width="120" height="60" rx="6" fill="#fce7f3" stroke="#db2777"/>
+  <text x="640" y="163" text-anchor="middle" font-weight="600" fill="#9d174d" font-size="12">Reconciliation</text>
+  <text x="640" y="179" text-anchor="middle" fill="#9d174d" font-size="11">converges</text>
+
+  <!-- Result: Specialist appears -->
+  <line x1="640" y1="200" x2="640" y2="235" stroke="#475569" stroke-width="1.5" marker-end="url(#arrow)"/>
+
+  <!-- Specialist node -->
+  <rect x="565" y="240" width="150" height="50" rx="6" fill="#f0fdf4" stroke="#16a34a" stroke-dasharray="6,3"/>
+  <text x="640" y="262" text-anchor="middle" font-weight="600" fill="#166534" font-size="12">specialist-product-x</text>
+  <text x="640" y="278" text-anchor="middle" fill="#166534" font-size="11">claudony_app (new)</text>
+
+  <!-- Resolved flow - bottom -->
+  <text x="85" y="260" text-anchor="middle" font-weight="600" fill="#475569" font-size="12">On RESOLVED:</text>
+  <rect x="20" y="270" width="130" height="45" rx="6" fill="#e0f2fe" stroke="#0284c7"/>
+  <text x="85" y="292" text-anchor="middle" fill="#0369a1" font-size="11">situationResolved()</text>
+  <text x="85" y="306" text-anchor="middle" fill="#0369a1" font-size="11">→ withoutNode()</text>
+
+  <!-- Catalog reference -->
+  <rect x="400" y="50" width="150" height="50" rx="6" fill="#fff7ed" stroke="#ea580c" stroke-dasharray="4,3"/>
+  <text x="475" y="72" text-anchor="middle" font-weight="600" fill="#c2410c" font-size="12">Specialist Catalog</text>
+  <text x="475" y="87" text-anchor="middle" fill="#c2410c" font-size="11">inline data block</text>
+
+  <!-- Arrow from catalog to deployer -->
+  <path d="M400,80 Q370,120 330,140" fill="none" stroke="#ea580c" stroke-width="1" stroke-dasharray="4,3" marker-end="url(#arrow)"/>
+</svg>
