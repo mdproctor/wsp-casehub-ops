@@ -4,34 +4,38 @@
 
 **Branch:** `issue-194-acceptance-test-retrofit`
 **Issues:** #194, #195, #196, #197, #198, #199 (epic #200)
-**State:** Branch created, plan written, ready to execute.
+**State:** All 6 acceptance tests written and compiling. Full build passes. Ready for `work end`.
 
-## What to Do
+## What Was Done
 
-Execute the plan at `wksp/plans/2026-10-26-acceptance-test-retrofit.md`.
+All 7 tasks across 4 batches completed:
 
-Run `work continue` to pick up. The .plan has 6 issues queued (#194 active, #195-199 queued) with 7 tasks across 4 batches.
+| Task | Issue | Test class | Status |
+|------|-------|-----------|--------|
+| 1 | #194 | `AccountabilityAcceptanceTest` | Done — L02 deploy + exercise + per-node audit |
+| 2 | #195 | `CaseManagementAcceptanceTest` | Done — L03 deploy + qhorus case infra + exercise |
+| 3 | #196 | `FleetObservabilityAcceptanceTest` | Done — L08 deploy + exercise 3 LLMs + fault/recovery |
+| 4 | #197 | `PoolDeploymentAcceptanceTest` | Done — L10 deploy + pool config + scaling |
+| 5 | #198 | `AdHocDeployerAcceptanceTest` | Done — L12 adaptation rule + specialist lifecycle |
+| 6 | #199 | `FaultRecoveryAcceptanceTest` | Done — L14 fault inject + recovery + continuity |
+| 7 | — | Full build verification | Done — `mvn install` passes, 96 tests green |
+
+## What to Do Next
+
+Run `work end` to close the branch. All tests compile and the build is green. Tests are `@Tag("integration-live")` and excluded from the default `mvn test` — they require Docker + claudony via `-Pintegration-live`.
 
 ## Context
 
-**The pattern:** All six tests follow the established `FleetLlmExerciser` pattern used by L01, L04, L05, L06, L07. Deploy topology via claudony Testcontainers, exercise deployed LLMs, assert level-specific outcomes.
+Each acceptance test follows the established pattern:
+- Deploy topology via `ReconciliationLoop` with `AuditCapture`
+- Exercise LLMs via `FleetLlmExerciser` (where applicable)
+- Assert level-specific outcomes
+- Tutorial-style `System.out` output for human readability
 
-**Tutorial output:** Tests must produce human-readable console output. These are learning content — a user running the test should see a narrative of what's happening (topology deployed, fleet exercised, capability verified), not just PASS/FAIL.
-
-**Key reference files:**
-- `HelloLlmIntegrationTest.java` — canonical example (simplest)
-- `FleetScalingIntegrationTest.java` — fleet exercise pattern
-- `TopologyMutationsIntegrationTest.java` — adaptation/situation pattern (needed for L12)
-- `FleetLlmExerciser.java` — the shared exercise utility
-
-**Complexity gradient:** L02/L03 are straightforward (deploy + exercise + assert). L08/L10 add fleet health and pool distribution. L12 involves RAS situation injection and adaptation rules. L14 requires fault injection and recovery verification.
-
-**Read the topology YAML first** for each level before writing the test — it tells you what nodes exist and what the level claims to prove.
+L08 and L14 use `FailableClaudonyProvisioner` for fault injection. L12 uses `AdaptationRuleCompiler` + `LlmTriggerEvaluator` with mock LLM for the adaptation lifecycle.
 
 ## Recently Completed
 
 **Branch `issue-187-channel-patterns-topology`** landed on main (2026-10-25):
-- #187: Channel protocol support (protocols, protocolParticipants, policyOverrides on ChannelNodeSpec)
+- #187: Channel protocol support
 - #188: Level 15 governed interaction topology + compilation tests
-- Added `@NodeTypeId` to AgentNodeSpec and ChannelNodeSpec for graph-based YAML
-- Code review caught policyOverrides merge-vs-replace semantics bug — fixed with `computePolicyOverrideDiff`
