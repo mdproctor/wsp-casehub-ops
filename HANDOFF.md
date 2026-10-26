@@ -4,32 +4,40 @@
 
 **Branch:** `issue-150-multi-env-deployment`
 **Issues:** #150 (epic), #151, #152, #153
-**State:** Branch created, .plan scaffolded. Ready to brainstorm and plan.
+**State:** Active — design complete, implementation plan written, ready to execute.
 
 ## What to Do
 
-Run `work continue` to pick up. The next step is brainstorming the design for #150 — specifically the environment abstraction that lets the same topology YAML deploy to local, Kubernetes, and Podman without changes.
+Run `work continue` to pick up. Execute the implementation plan at `/Users/mdproctor/claude/public/casehub-ops/plans/2026-10-26-multi-env-deployment.md`.
+
+Use `executing-plans` to implement task-by-task. 7 tasks across 4 batches:
+1. **Foundation (#151):** TargetEnvironment enum, EnvironmentAwareNodeProvisioner, TargetEnvironmentFactory, Maven profiles, regression verification
+2. **K8s (#152):** KubernetesDeploymentTarget, K3dClusterExtension
+3. **Podman (#153):** PodmanEnvironmentExtension
+4. **Verification:** Full project build + regression
 
 ## Context
 
-**The goal:** Same topology YAML → different target environments. The `NodeProvisioner` SPI is the extension point — each environment gets its own implementation. The topology YAML stays environment-agnostic; environment selection happens at deploy time via configuration.
+**Design spec:** `/Users/mdproctor/claude/public/casehub-ops/specs/issue-150-multi-env-deployment/2026-10-26-multi-env-deployment-design.md`
+
+**Key design decisions (5 total, all quick picks):**
+- D1: TargetEnvironment enum + factory pattern (not CDI, not TopologyRunner)
+- D2: Same NodeProvisioner, swap ApplicationDeploymentTarget (not separate provisioners)
+- D3: k3d via testcontainers-k3s (not kind)
+- D4: Lightweight abstractions in testing/, heavy wiring in topology-tests/
+- D5: Default to LOCAL, new profiles additive (backward compatible)
 
 **What exists:**
-- `container/` module — Podman REST API support for app containers, databases, networks, volumes. Foundation for #153.
-- `ClaudonyNodeProvisioner` — proven across 6 acceptance tests (just landed). Handles `casehub_application` and `claudony_app` node types via the claudony fleet API.
-- `NodeProvisioner` SPI — the desiredstate runtime's extension point. `handledTypes()`, `provision()`, `deprovision()`, `resyncInterval()`.
-- `ServiceCluster` / `ServiceProcess` — test harness for launching real service instances.
-
-**The three children:**
-- **#151** Environment abstraction layer — how topology tests select a provisioner (config property? profile? annotation?). This unblocks #152 and #153.
-- **#152** Kubernetes provisioner — deploy topology nodes to k8s via k3d/kind. New `NodeProvisioner` implementation.
-- **#153** Podman provisioner — deploy topology nodes to podman pods. New `NodeProvisioner` implementation, building on the existing `container/` module.
-
-**Key design question:** How does environment selection work? Options include a `target-environment` config property in the topology YAML, a test profile (`-Pintegration-k8s`), or a system property. The brainstorm should explore these.
+- `ApplicationDeploymentTarget` SPI in `api/` — `deploy()`, `undeploy()`, `status()`, `healthCheck()`
+- `PodmanDeploymentTarget` in `container/` — ready to use
+- `Fabric8NodeProvisioner` in `topology-tests/live/` — K8s patterns proven
+- `ClaudonyNodeProvisioner` in `topology-tests/integration/` — current provisioner to be generalized
+- testcontainers-k3s and fabric8 already in `topology-tests/pom.xml`
 
 ## Recently Completed
 
-**Branch `issue-194-acceptance-test-retrofit`** landed on main (2026-10-26):
-- #194-#199: Six acceptance tests across L02, L03, L08, L10, L12, L14
-- Each proves its topology level works end-to-end (not just deploys)
-- Tutorial-style console output for learning content
+**Design phase (2026-10-26):**
+- Brainstormed #150 design — discovered #117 deployment profiles already designed most of the production infrastructure
+- Scoped #150 to test-level multi-env: same YAML, different provisioner via environment abstraction
+- 5 decisions captured, all quick picks applying existing patterns
+- Design spec and implementation plan written and committed
