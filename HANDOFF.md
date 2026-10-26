@@ -1,29 +1,39 @@
-# Handover — Level 12 ad-hoc LLM deployer complete
+# Handoff — casehub-ops
+
+## Active Work
 
 **Branch:** `main` (clean)
-**Landed this session:** #148
+**Last landed:** #203
 
-## What was done
+## What to Do
 
-1. **#148** Level 12: Ad-hoc LLM Deployer — landed on main as `5ddfba5`. Topology YAML with deployer node + specialist catalog, `AdhocLlmDeployerRecompiler` (SituationRecompiler SPI implementation), 5 compilation tests, 6 unit tests, 4 integration tests. Tests cover: full lifecycle (deploy/remove), concurrent alerts, rejection, specialist health failure. Design review surfaced the existing adaptation rule system (`DeploymentAdaptiveSituationRecompiler`) — decision D3 chose to follow its pattern but implementation used direct `withNode()`/`withoutNode()` because `AddActionSpec` is coupled to `DeploymentGoals`.
+`work start #205` — container image build for CaseHub services. This is the prerequisite that turns multi-env deployment from nginx:alpine placeholders into real running services on K8s and Podman.
 
-2. **#189** filed — extend the adaptation rule framework for LLM-evaluated triggers and cross-domain add actions. This makes Level 12's deployer expressible as a pure YAML rule (matching all other levels). Key motivation: YAML-driven rules iterate faster (no compile cycle), work better with LLM coding assistants, and preserve audit/reproducibility.
+## Context
 
-## Key Design Insight
+**Multi-env deployment is fully wired and proven:**
+- #150 (epic, 4 issues) — environment abstraction layer, `TargetEnvironment` enum, `EnvironmentAwareNodeProvisioner`, `KubernetesDeploymentTarget`, `K3dClusterExtension`, `PodmanEnvironmentExtension`, Maven profiles
+- #203 — Level 01 deploys to all three environments (LOCAL, K8S, PODMAN), verified passing
 
-All other topology levels (L01-L14) are pure YAML — the framework Java handles everything. Level 12 is the first requiring per-level Java (`AdhocLlmDeployerRecompiler`). #189 fixes this by making LLM-evaluated triggers a framework capability. Once landed, Level 12's Java recompiler is replaced by a YAML rule and removed. Nothing in the ops domain benefits from compiled Java speed — all hot paths are I/O-bound (provisioning, LLM calls).
+**What's missing:** real container images. K8s and Podman tests use `nginx:alpine` as an image override because CaseHub service images don't exist locally. #205 adds `quarkus-container-image-jib` to each service repo so `mvn package -Dquarkus.container-image.build=true` produces local images.
 
-3. **Blog entry** written: "The LLM That Deploys LLMs" — covers the runtime proof, adaptation system discovery, YAML-first vs Java SPI contrast, and the path to #189. Two SVG diagrams (mutation flow, YAML-vs-Java comparison).
+**Services needing Jib:** claudony, eidos, engine, manifest (Level 01 minimum). Then work, ledger for higher levels. Each is XS/Low — add the Jib dependency and image config to `application.properties`.
 
-## Immediate Next Step
+**Infrastructure available:**
+- Podman machine running (`podman-machine-default`, 7 CPUs, 8GB RAM)
+- `DOCKER_HOST` set to Podman socket — testcontainers uses Podman as Docker replacement
+- k3s testcontainer works on Podman (verified in #203)
+- Netty native kqueue transport configured for domain sockets
 
-`work start #189` — extend adaptation rule framework. L/High. Two framework changes needed:
-1. New `AdaptationTrigger` type: `llm-evaluated` (delegates to deployed LLM node)
-2. Domain-agnostic `AddActionSpec` (currently coupled to `DeploymentGoals`/`DeploymentGoalCompiler`)
+**Claudony issues resolved this session:**
+- #294 — orphan config properties (Jandex index missing)
+- #295 — connector config defaults in wrong file
+- #296 — defaults moved to main application.properties
+- #297 — root cause: `casehub-platform-registry-inmem` JAR had no Jandex index, `NoOpRegistryService` `@DefaultBean` silently discarded all registrations
 
-## References
+## Key files
 
-- Level 12 topology: `topology-tests/src/test/resources/topologies/deployment/12-adhoc-llm-deployer/`
-- Design spec: `specs/issue-148-adhoc-llm-deployer/2026-10-25-adhoc-llm-deployer-design.md` (in workspace)
-- Existing adaptation system: `deployment/src/main/java/io/casehub/ops/deployment/adaptation/`
-- Follow-up issue: casehubio/casehub-ops#189
+- `testing/src/main/java/io/casehub/ops/testing/env/` — `TargetEnvironment`, `EnvironmentAwareNodeProvisioner`
+- `topology-tests/src/test/java/io/casehub/ops/topology/env/` — `TargetEnvironmentFactory`, `KubernetesDeploymentTarget`, `K3dClusterExtension`, `PodmanEnvironmentExtension`, `ImageOverridingTarget`, `HelloLlmMultiEnvTest`
+- `docs/specs/issue-150-multi-env-deployment/` — design spec and decisions
+- `docs/specs/issue-117-deployment-profiles-bootstrap/` — production deployment profiles spec (#150 builds on this)
