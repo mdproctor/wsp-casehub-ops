@@ -1,8 +1,8 @@
 # Work Plan — issue-194-acceptance-test-retrofit
 
 ## State
-branch: issue-194-acceptance-test-retrofit
-state: active
+branch: 
+state: closing:review
 project-sha: 
 date: 
 issue-repo: casehubio/casehub-ops
@@ -11,21 +11,11 @@ design-repo:
 design-section-hashes: 
 flyway-next-v: 
 
+evidence-era: true
 ## Queue
-- [ ] casehubio/casehub-ops#194 — Issue #194 ← active
-  - [ ] Batch 1: Foundation
-    - [ ] Task 1: L02 Accountability acceptance test
-    - [ ] Task 2: L03 Case Management acceptance test
-  - [ ] Batch 2: Fleet
-    - [ ] Task 3: L08 Fleet Observability acceptance test
-    - [ ] Task 4: L10 Pool Deployment acceptance test
-  - [ ] Batch 3: Advanced
-    - [ ] Task 5: L12 Ad-hoc Deployer acceptance test
-    - [ ] Task 6: L14 Fault Recovery acceptance test
-  - [ ] Batch 4: Verification
-    - [ ] Task 7: Full build verification
-- [ ] casehubio/casehub-ops#195 — L03
-- [ ] casehubio/casehub-ops#196 — L08
-- [ ] casehubio/casehub-ops#197 — L10
-- [ ] casehubio/casehub-ops#198 — L12
-- [ ] casehubio/casehub-ops#199 — L14
+- [x] casehubio/casehub-ops#194 — Issue #194
+- [x] casehubio/casehub-ops#195 — L03
+- [x] casehubio/casehub-ops#196 — L08
+- [x] casehubio/casehub-ops#197 — L10
+- [x] casehubio/casehub-ops#198 — L12
+- [x] casehubio/casehub-ops#199 — L14
