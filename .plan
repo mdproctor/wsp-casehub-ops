@@ -1,7 +1,7 @@
 # Work Plan — issue-150-multi-env-deployment
 
 ## State
-branch: issue-150-multi-env-deployment
+branch: 
 state: active
 project-sha: 
 date: 
@@ -12,18 +12,7 @@ design-section-hashes:
 flyway-next-v: 
 
 ## Queue
-- [ ] casehubio/casehub-ops#150 — Issue #150 ← active
-  - [x] Batch 1: Foundation
-    - [x] Task 1: TargetEnvironment enum + EnvironmentAwareNodeProvisioner
-    - [x] Task 2: TargetEnvironmentFactory + Maven profiles
-    - [x] Task 3: Regression verification on LOCAL
-  - [x] Batch 2: K8s
-    - [x] Task 4: KubernetesDeploymentTarget
-    - [x] Task 5: K3dClusterExtension
-  - [x] Batch 3: Podman
-    - [x] Task 6: PodmanEnvironmentExtension
-  - [x] Batch 4: Verification
-    - [x] Task 7: Full project build + regression
-- [ ] casehubio/casehub-ops#151 — Environment abstraction layer
-- [ ] casehubio/casehub-ops#152 — Kubernetes provisioner
-- [ ] casehubio/casehub-ops#153 — Podman provisioner
+- [x] casehubio/casehub-ops#150 — Issue #150
+- [x] casehubio/casehub-ops#151 — Environment abstraction layer
+- [x] casehubio/casehub-ops#152 — Kubernetes provisioner
+- [x] casehubio/casehub-ops#153 — Podman provisioner
