@@ -1,0 +1,2 @@
+{"event":"land","repo":"ops","branch":"issue-189-llm-triggers-cross-domain","base_branch":"main","landed_sha":"ff0e3a80480932d76e6034de963a729ad42f57c6","push_target":"origin","mirrored":false,"stamped":true,"timestamp":"2026-10-25T17:17:42.296145+00:00"}
+{"event":"land","repo":"ops","branch":"issue-187-channel-patterns-topology","base_branch":"main","landed_sha":"e88193bb5e6e59184152b06c466717fe371d2b9c","push_target":"origin","mirrored":false,"stamped":true,"timestamp":"2026-10-26T00:00:41.967493+00:00"}
