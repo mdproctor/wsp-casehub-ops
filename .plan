@@ -13,17 +13,17 @@ flyway-next-v:
 
 ## Queue
 - [ ] casehubio/casehub-ops#150 — Issue #150 ← active
-  - [ ] Batch 1: Foundation
-    - [ ] Task 1: TargetEnvironment enum + EnvironmentAwareNodeProvisioner
-    - [ ] Task 2: TargetEnvironmentFactory + Maven profiles
-    - [ ] Task 3: Regression verification on LOCAL
-  - [ ] Batch 2: K8s
-    - [ ] Task 4: KubernetesDeploymentTarget
-    - [ ] Task 5: K3dClusterExtension
-  - [ ] Batch 3: Podman
-    - [ ] Task 6: PodmanEnvironmentExtension
-  - [ ] Batch 4: Verification
-    - [ ] Task 7: Full project build + regression
+  - [x] Batch 1: Foundation
+    - [x] Task 1: TargetEnvironment enum + EnvironmentAwareNodeProvisioner
+    - [x] Task 2: TargetEnvironmentFactory + Maven profiles
+    - [x] Task 3: Regression verification on LOCAL
+  - [x] Batch 2: K8s
+    - [x] Task 4: KubernetesDeploymentTarget
+    - [x] Task 5: K3dClusterExtension
+  - [x] Batch 3: Podman
+    - [x] Task 6: PodmanEnvironmentExtension
+  - [x] Batch 4: Verification
+    - [x] Task 7: Full project build + regression
 - [ ] casehubio/casehub-ops#151 — Environment abstraction layer
 - [ ] casehubio/casehub-ops#152 — Kubernetes provisioner
 - [ ] casehubio/casehub-ops#153 — Podman provisioner
