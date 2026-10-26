@@ -6,10 +6,13 @@ state: scaffolded
 project-sha: 
 date: 
 issue-repo: casehubio/casehub-ops
-covers: 150
+covers: 150,151,152,153
 design-repo: 
 design-section-hashes: 
 flyway-next-v: 
 
 ## Queue
 - [ ] casehubio/casehub-ops#150 — Issue #150 ← active
+- [ ] casehubio/casehub-ops#151 — Environment abstraction layer
+- [ ] casehubio/casehub-ops#152 — Kubernetes provisioner
+- [ ] casehubio/casehub-ops#153 — Podman provisioner

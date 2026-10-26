@@ -1,29 +1,35 @@
-# Handover — Level 12 ad-hoc LLM deployer complete
+# Handoff — casehub-ops
 
-**Branch:** `main` (clean)
-**Landed this session:** #148
+## Active Work
 
-## What was done
+**Branch:** `issue-150-multi-env-deployment`
+**Issues:** #150 (epic), #151, #152, #153
+**State:** Branch created, .plan scaffolded. Ready to brainstorm and plan.
 
-1. **#148** Level 12: Ad-hoc LLM Deployer — landed on main as `5ddfba5`. Topology YAML with deployer node + specialist catalog, `AdhocLlmDeployerRecompiler` (SituationRecompiler SPI implementation), 5 compilation tests, 6 unit tests, 4 integration tests. Tests cover: full lifecycle (deploy/remove), concurrent alerts, rejection, specialist health failure. Design review surfaced the existing adaptation rule system (`DeploymentAdaptiveSituationRecompiler`) — decision D3 chose to follow its pattern but implementation used direct `withNode()`/`withoutNode()` because `AddActionSpec` is coupled to `DeploymentGoals`.
+## What to Do
 
-2. **#189** filed — extend the adaptation rule framework for LLM-evaluated triggers and cross-domain add actions. This makes Level 12's deployer expressible as a pure YAML rule (matching all other levels). Key motivation: YAML-driven rules iterate faster (no compile cycle), work better with LLM coding assistants, and preserve audit/reproducibility.
+Run `work continue` to pick up. The next step is brainstorming the design for #150 — specifically the environment abstraction that lets the same topology YAML deploy to local, Kubernetes, and Podman without changes.
 
-## Key Design Insight
+## Context
 
-All other topology levels (L01-L14) are pure YAML — the framework Java handles everything. Level 12 is the first requiring per-level Java (`AdhocLlmDeployerRecompiler`). #189 fixes this by making LLM-evaluated triggers a framework capability. Once landed, Level 12's Java recompiler is replaced by a YAML rule and removed. Nothing in the ops domain benefits from compiled Java speed — all hot paths are I/O-bound (provisioning, LLM calls).
+**The goal:** Same topology YAML → different target environments. The `NodeProvisioner` SPI is the extension point — each environment gets its own implementation. The topology YAML stays environment-agnostic; environment selection happens at deploy time via configuration.
 
-3. **Blog entry** written: "The LLM That Deploys LLMs" — covers the runtime proof, adaptation system discovery, YAML-first vs Java SPI contrast, and the path to #189. Two SVG diagrams (mutation flow, YAML-vs-Java comparison).
+**What exists:**
+- `container/` module — Podman REST API support for app containers, databases, networks, volumes. Foundation for #153.
+- `ClaudonyNodeProvisioner` — proven across 6 acceptance tests (just landed). Handles `casehub_application` and `claudony_app` node types via the claudony fleet API.
+- `NodeProvisioner` SPI — the desiredstate runtime's extension point. `handledTypes()`, `provision()`, `deprovision()`, `resyncInterval()`.
+- `ServiceCluster` / `ServiceProcess` — test harness for launching real service instances.
 
-## Immediate Next Step
+**The three children:**
+- **#151** Environment abstraction layer — how topology tests select a provisioner (config property? profile? annotation?). This unblocks #152 and #153.
+- **#152** Kubernetes provisioner — deploy topology nodes to k8s via k3d/kind. New `NodeProvisioner` implementation.
+- **#153** Podman provisioner — deploy topology nodes to podman pods. New `NodeProvisioner` implementation, building on the existing `container/` module.
 
-`work start #189` — extend adaptation rule framework. L/High. Two framework changes needed:
-1. New `AdaptationTrigger` type: `llm-evaluated` (delegates to deployed LLM node)
-2. Domain-agnostic `AddActionSpec` (currently coupled to `DeploymentGoals`/`DeploymentGoalCompiler`)
+**Key design question:** How does environment selection work? Options include a `target-environment` config property in the topology YAML, a test profile (`-Pintegration-k8s`), or a system property. The brainstorm should explore these.
 
-## References
+## Recently Completed
 
-- Level 12 topology: `topology-tests/src/test/resources/topologies/deployment/12-adhoc-llm-deployer/`
-- Design spec: `specs/issue-148-adhoc-llm-deployer/2026-10-25-adhoc-llm-deployer-design.md` (in workspace)
-- Existing adaptation system: `deployment/src/main/java/io/casehub/ops/deployment/adaptation/`
-- Follow-up issue: casehubio/casehub-ops#189
+**Branch `issue-194-acceptance-test-retrofit`** landed on main (2026-10-26):
+- #194-#199: Six acceptance tests across L02, L03, L08, L10, L12, L14
+- Each proves its topology level works end-to-end (not just deploys)
+- Tutorial-style console output for learning content
