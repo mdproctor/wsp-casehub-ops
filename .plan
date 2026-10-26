@@ -13,3 +13,19 @@ flyway-next-v:
 
 ## Queue
 - [ ] casehubio/casehub-ops#194 — Issue #194 ← active
+  - [ ] Batch 1: Foundation
+    - [ ] Task 1: L02 Accountability acceptance test
+    - [ ] Task 2: L03 Case Management acceptance test
+  - [ ] Batch 2: Fleet
+    - [ ] Task 3: L08 Fleet Observability acceptance test
+    - [ ] Task 4: L10 Pool Deployment acceptance test
+  - [ ] Batch 3: Advanced
+    - [ ] Task 5: L12 Ad-hoc Deployer acceptance test
+    - [ ] Task 6: L14 Fault Recovery acceptance test
+  - [ ] Batch 4: Verification
+    - [ ] Task 7: Full build verification
+- [ ] casehubio/casehub-ops#195 — L03
+- [ ] casehubio/casehub-ops#196 — L08
+- [ ] casehubio/casehub-ops#197 — L10
+- [ ] casehubio/casehub-ops#198 — L12
+- [ ] casehubio/casehub-ops#199 — L14

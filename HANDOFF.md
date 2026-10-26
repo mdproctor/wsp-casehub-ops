@@ -1,29 +1,37 @@
-# Handover — Level 12 ad-hoc LLM deployer complete
+# Handoff — casehub-ops
 
-**Branch:** `main` (clean)
-**Landed this session:** #148
+## Active Work
 
-## What was done
+**Branch:** `issue-194-acceptance-test-retrofit`
+**Issues:** #194, #195, #196, #197, #198, #199 (epic #200)
+**State:** Branch created, plan written, ready to execute.
 
-1. **#148** Level 12: Ad-hoc LLM Deployer — landed on main as `5ddfba5`. Topology YAML with deployer node + specialist catalog, `AdhocLlmDeployerRecompiler` (SituationRecompiler SPI implementation), 5 compilation tests, 6 unit tests, 4 integration tests. Tests cover: full lifecycle (deploy/remove), concurrent alerts, rejection, specialist health failure. Design review surfaced the existing adaptation rule system (`DeploymentAdaptiveSituationRecompiler`) — decision D3 chose to follow its pattern but implementation used direct `withNode()`/`withoutNode()` because `AddActionSpec` is coupled to `DeploymentGoals`.
+## What to Do
 
-2. **#189** filed — extend the adaptation rule framework for LLM-evaluated triggers and cross-domain add actions. This makes Level 12's deployer expressible as a pure YAML rule (matching all other levels). Key motivation: YAML-driven rules iterate faster (no compile cycle), work better with LLM coding assistants, and preserve audit/reproducibility.
+Execute the plan at `wksp/plans/2026-10-26-acceptance-test-retrofit.md`.
 
-## Key Design Insight
+Run `work continue` to pick up. The .plan has 6 issues queued (#194 active, #195-199 queued) with 7 tasks across 4 batches.
 
-All other topology levels (L01-L14) are pure YAML — the framework Java handles everything. Level 12 is the first requiring per-level Java (`AdhocLlmDeployerRecompiler`). #189 fixes this by making LLM-evaluated triggers a framework capability. Once landed, Level 12's Java recompiler is replaced by a YAML rule and removed. Nothing in the ops domain benefits from compiled Java speed — all hot paths are I/O-bound (provisioning, LLM calls).
+## Context
 
-3. **Blog entry** written: "The LLM That Deploys LLMs" — covers the runtime proof, adaptation system discovery, YAML-first vs Java SPI contrast, and the path to #189. Two SVG diagrams (mutation flow, YAML-vs-Java comparison).
+**The pattern:** All six tests follow the established `FleetLlmExerciser` pattern used by L01, L04, L05, L06, L07. Deploy topology via claudony Testcontainers, exercise deployed LLMs, assert level-specific outcomes.
 
-## Immediate Next Step
+**Tutorial output:** Tests must produce human-readable console output. These are learning content — a user running the test should see a narrative of what's happening (topology deployed, fleet exercised, capability verified), not just PASS/FAIL.
 
-`work start #189` — extend adaptation rule framework. L/High. Two framework changes needed:
-1. New `AdaptationTrigger` type: `llm-evaluated` (delegates to deployed LLM node)
-2. Domain-agnostic `AddActionSpec` (currently coupled to `DeploymentGoals`/`DeploymentGoalCompiler`)
+**Key reference files:**
+- `HelloLlmIntegrationTest.java` — canonical example (simplest)
+- `FleetScalingIntegrationTest.java` — fleet exercise pattern
+- `TopologyMutationsIntegrationTest.java` — adaptation/situation pattern (needed for L12)
+- `FleetLlmExerciser.java` — the shared exercise utility
 
-## References
+**Complexity gradient:** L02/L03 are straightforward (deploy + exercise + assert). L08/L10 add fleet health and pool distribution. L12 involves RAS situation injection and adaptation rules. L14 requires fault injection and recovery verification.
 
-- Level 12 topology: `topology-tests/src/test/resources/topologies/deployment/12-adhoc-llm-deployer/`
-- Design spec: `specs/issue-148-adhoc-llm-deployer/2026-10-25-adhoc-llm-deployer-design.md` (in workspace)
-- Existing adaptation system: `deployment/src/main/java/io/casehub/ops/deployment/adaptation/`
-- Follow-up issue: casehubio/casehub-ops#189
+**Read the topology YAML first** for each level before writing the test — it tells you what nodes exist and what the level claims to prove.
+
+## Recently Completed
+
+**Branch `issue-187-channel-patterns-topology`** landed on main (2026-10-25):
+- #187: Channel protocol support (protocols, protocolParticipants, policyOverrides on ChannelNodeSpec)
+- #188: Level 15 governed interaction topology + compilation tests
+- Added `@NodeTypeId` to AgentNodeSpec and ChannelNodeSpec for graph-based YAML
+- Code review caught policyOverrides merge-vs-replace semantics bug — fixed with `computePolicyOverrideDiff`
