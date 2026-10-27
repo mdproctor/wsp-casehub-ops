@@ -675,8 +675,6 @@ Refs #206"
 
 **Files:**
 - Modify: `claudony/src/main/java/io/casehub/ops/claudony/ClaudonyDeploymentTarget.java`
-- Modify: `topology-tests/src/test/java/io/casehub/ops/topology/integration/ServiceClusterExtension.java`
-- Modify: `topology-tests/src/test/java/io/casehub/ops/topology/compilation/TopologyTestBase.java`
 - Test: `topology-tests/src/test/java/io/casehub/ops/topology/env/ClaudonyDeploymentTargetServiceUrlTest.java` (create)
 
 **Interfaces:**
