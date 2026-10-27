@@ -13,3 +13,12 @@ flyway-next-v:
 
 ## Queue
 - [ ] casehubio/casehub-ops#206 — Issue #206 ← active
+  - [ ] Batch 1: Foundation
+    - [ ] Task 1: Extend DeployConfig and ApplicationDeploymentTarget
+    - [ ] Task 2: Create ServiceHealthWaiter and refactor ServiceProcess
+  - [ ] Batch 2: Targets
+    - [ ] Task 3: PodmanDeploymentTarget port mapping and serviceUrl
+    - [ ] Task 4: KubernetesDeploymentTarget port-forward and close
+    - [ ] Task 5: ClaudonyDeploymentTarget URL registration
+  - [ ] Batch 3: Unified test
+    - [ ] Task 6: Rewrite HelloLlmMultiEnvTest
