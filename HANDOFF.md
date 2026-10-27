@@ -2,38 +2,44 @@
 
 ## Active Work
 
-**Branch:** `main` (clean)
-**Last landed:** #203
+**Branch:** `issue-207-multi-env-deploy-testing` (paused)
+**Epic:** #207 — Harden multi-environment deployment testing (LOCAL/K8S/PODMAN parity)
+**State:** design complete, implementation plan written, ready to execute
 
 ## What to Do
 
-`work start #205` — container image build for CaseHub services. This is the prerequisite that turns multi-env deployment from nginx:alpine placeholders into real running services on K8s and Podman.
+`work resume` → then start executing the plan at `/Users/mdproctor/claude/public/casehub-ops/plans/2026-10-27-multi-env-deploy-testing.md`
 
-## Context
+Batches 1-2 and 4 can start immediately. Batch 3 is blocked on cross-repo prerequisites (platform#666, eidos#208).
 
-**Multi-env deployment is fully wired and proven:**
-- #150 (epic, 4 issues) — environment abstraction layer, `TargetEnvironment` enum, `EnvironmentAwareNodeProvisioner`, `KubernetesDeploymentTarget`, `K3dClusterExtension`, `PodmanEnvironmentExtension`, Maven profiles
-- #203 — Level 01 deploys to all three environments (LOCAL, K8S, PODMAN), verified passing
+## Cross-Repo Issues Filed
 
-**What's missing:** real container images. K8s and Podman tests use `nginx:alpine` as an image override because CaseHub service images don't exist locally. #205 adds `quarkus-container-image-jib` to each service repo so `mvn package -Dquarkus.container-image.build=true` produces local images.
+- **casehubio/platform#666** — `agent-rest` module: structured HTTP agent invocation endpoint + `AgentResolver` SPI. Prerequisite for ops #208.
+- **casehubio/eidos#208** — implement `AgentResolver` SPI using `SystemPromptRenderer`. Depends on platform#666.
 
-**Services needing Jib:** claudony, eidos, engine, manifest (Level 01 minimum). Then work, ledger for higher levels. Each is XS/Low — add the Jib dependency and image config to `application.properties`.
+## Architecture Decisions
 
-**Infrastructure available:**
-- Podman machine running (`podman-machine-default`, 7 CPUs, 8GB RAM)
-- `DOCKER_HOST` set to Podman socket — testcontainers uses Podman as Docker replacement
-- k3s testcontainer works on Podman (verified in #203)
-- Netty native kqueue transport configured for domain sockets
+1. **K8S/PODMAN deploy path**: direct `target.deploy()` (not TransitionPlanner). Runtime validated by reconciliation tests.
+2. **HTTP agent invocation**: platform `POST /api/agent/chat` with AgentResolver SPI (eidos implements).
+3. **ImageResolver**: context-based mutually exclusive tiers (LOCAL/REGISTRY/FALLBACK) — not a fallback chain.
+4. **Shared assertion contract**: `LlmResponse` + `LlmAssertions` migrate from topology-tests to testing/ module.
+5. **Production networking**: tiered — NodePort for test/dev, Ingress for production (deferred).
+6. **Sequencing**: #209 → platform#666 + eidos#208 → ops#208 → #210 → #211
 
-**Claudony issues resolved this session:**
-- #294 — orphan config properties (Jandex index missing)
-- #295 — connector config defaults in wrong file
-- #296 — defaults moved to main application.properties
-- #297 — root cause: `casehub-platform-registry-inmem` JAR had no Jandex index, `NoOpRegistryService` `@DefaultBean` silently discarded all registrations
+## Plan Summary (6 tasks, 6 batches)
 
-## Key files
+1. **ImageResolver Enhancement** (#209) — `ImageSource` enum, context-based tiers
+2. **Shared Assertion Contract** (#208) — extract `LlmResponse` + `LlmAssertions` to testing/
+3. **HTTP Fleet Exerciser** (#208) — `HttpFleetExerciser` + wire into HelloLlmMultiEnvTest *(blocked on platform#666)*
+4. **K8S Target Consolidation** (#211) — move to deployment/, delete stub
+5. **NodePort Networking** (#211) — replace port-forwarding, K3d port mapping
+6. **CI Pipeline** (#210) — GitHub Actions dispatch workflow
 
-- `testing/src/main/java/io/casehub/ops/testing/env/` — `TargetEnvironment`, `EnvironmentAwareNodeProvisioner`
-- `topology-tests/src/test/java/io/casehub/ops/topology/env/` — `TargetEnvironmentFactory`, `KubernetesDeploymentTarget`, `K3dClusterExtension`, `PodmanEnvironmentExtension`, `ImageOverridingTarget`, `HelloLlmMultiEnvTest`
-- `docs/specs/issue-150-multi-env-deployment/` — design spec and decisions
-- `docs/specs/issue-117-deployment-profiles-bootstrap/` — production deployment profiles spec (#150 builds on this)
+## Key Files
+
+- `specs/issue-207-multi-env-deploy-testing/2026-10-27-multi-env-deploy-testing-design.md` — design spec
+- `specs/issue-207-multi-env-deploy-testing/decisions.md` — 6 captured decisions
+- `plans/2026-10-27-multi-env-deploy-testing.md` — implementation plan
+- `topology-tests/src/test/java/.../env/HelloLlmMultiEnvTest.java` — unified multi-env test
+- `topology-tests/src/test/java/.../integration/FleetLlmExerciser.java` — in-JVM exerciser
+- `testing/src/main/java/.../env/ImageResolver.java` — image resolution
