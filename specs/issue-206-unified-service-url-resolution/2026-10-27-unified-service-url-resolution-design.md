@@ -2,7 +2,7 @@
 
 **Issue:** #206
 **Date:** 2026-10-27
-**Status:** Draft
+**Status:** Revised (post-review)
 
 ## Summary
 
@@ -17,44 +17,62 @@ Issue #205 established container image deployment to K8S and PODMAN. But only LO
 ### In scope
 
 - `serviceUrl(String instanceId)` default method on `ApplicationDeploymentTarget`
-- K8S implementation via `kubectl port-forward` in k3s testcontainer
+- K8S implementation via fabric8 `KubernetesClient.portForward()` API
 - Podman implementation via container port mapping + inspect
+- LOCAL implementation via URL tracking in `ClaudonyDeploymentTarget`
 - `ServiceHealthWaiter` utility extracted from `ServiceProcess.waitForHealth()`
-- `healthPath` field on `CaseHubApplicationSpec` (optional, defaults to `/q/health/ready`)
+- `healthPath` field on `DeployConfig` (optional, defaults to `/q/health/ready`)
 - `HelloLlmMultiEnvTest` rewritten with unified assertion flow
-- `FleetLlmExerciser` retained as LOCAL-only additive assertion (in-JVM bonus)
+- `FleetLlmExerciser` retained as LOCAL-only additive assertion (in-JVM bonus — explicitly descoped from issue #206's deliverable list; see D1 rationale)
+- `ApplicationDeploymentTarget` extends `AutoCloseable` for port-forward cleanup
 
 ### Out of scope
 
 - Real images for eidos/engine/manifest (prerequisite: app modules in those repos)
 - CI orchestration for cross-repo image builds
 - Production service mesh or ingress configuration
+- HTTP-based functional exerciser for K8S/PODMAN (separate future issue — replaces FleetLlmExerciser's in-JVM approach with HTTP)
 
 ## Architecture
 
 ### Component 1: `serviceUrl()` on `ApplicationDeploymentTarget`
 
-Add a default method to the existing interface:
+Add a default method and extend `AutoCloseable`:
 
 ```java
-default Optional<String> serviceUrl(String instanceId) {
-    return Optional.empty();
+public interface ApplicationDeploymentTarget extends AutoCloseable {
+
+    default Optional<String> serviceUrl(String instanceId) {
+        return Optional.empty();
+    }
+
+    @Override
+    default void close() {}
+
+    // ... existing methods unchanged
 }
 ```
 
-Each implementation overrides:
+Each implementation overrides `serviceUrl()`:
 
-**`ClaudonyDeploymentTarget`** (LOCAL): The claudony fleet URL is already known from the constructor — it's the same URL used for fleet API calls. Apps deployed via claudony are accessible through claudony's proxy at `<fleetUrl>/api/apps/<appId>/proxy/`.
+**`ClaudonyDeploymentTarget`** (LOCAL): Claudony's fleet API registers apps as metadata — it does not proxy HTTP traffic to services. In the test, `ServiceClusterExtension` starts actual service processes via `ServiceProcess`, and their URLs come from `ServiceProcess.baseUrl()`. The test-created `ClaudonyDeploymentTarget` tracks a `Map<String, String> serviceUrls` map. After `ServiceClusterExtension` starts processes, it injects URLs into the target. `serviceUrl(instanceId)` reads from this map.
 
-**`KubernetesDeploymentTarget`** (K8S): After deploying, runs `kubectl port-forward svc/<instanceId> <localPort>:8080` inside the k3s container. The port-forward process binds to `0.0.0.0` so the host can reach it through the k3s container's mapped port. Returns `http://localhost:<hostPort>`.
+Implementation: add a `registerServiceUrl(String instanceId, String url)` method to `ClaudonyDeploymentTarget`. `ServiceClusterExtension` calls it after starting each `ServiceProcess`. For apps not managed by `ServiceClusterExtension` (registered via the topology planner), the URL is not available — `serviceUrl()` returns `Optional.empty()`.
 
-Implementation detail: `KubernetesDeploymentTarget` gains a `Map<String, Integer> portForwards` field tracking active port-forward mappings per instanceId. The `serviceUrl()` call starts the port-forward if not already running. `undeploy()` cleans up the port-forward.
+**`KubernetesDeploymentTarget`** (K8S): Uses fabric8's `KubernetesClient.portForward()` API to tunnel through the K8s API server (already exposed from k3s to the host by Testcontainers):
 
-Port allocation: Use `ServerSocket(0)` on the host side to find a free port. Then exec into k3s: `kubectl port-forward --address 0.0.0.0 svc/<name> <port>:8080 -n casehub-test &`. Since the k3s container maps ports to the host, the test JVM accesses `http://<k3sContainerHost>:<port>`.
+```java
+LocalPortForward pf = client.services()
+    .inNamespace(namespace)
+    .withName(instanceId)
+    .portForward(8080);
+int localPort = pf.getLocalPort();
+// URL: http://localhost:<localPort>
+```
 
-**`PodmanDeploymentTarget`** (PODMAN): Update `deploy()` to pass port mappings — map container port 8080 to host port 0 (dynamic assignment). After container starts, `serviceUrl()` inspects the container via `podman container inspect` to get the assigned host port. Returns `http://localhost:<hostPort>`.
+This avoids shell access to the k3s container entirely. `LocalPortForward` implements `Closeable` — the target tracks active forwards in a `Map<String, LocalPortForward>` and closes them all in `close()`.
 
-Implementation: `PodmanDeploymentTarget.deploy()` currently creates containers with `Map.of()` for port mappings. Change to `Map.of(8080, 0)` — Podman assigns a random host port. Add a `containerInspect(String id)` method to `PodmanClient` that returns port mapping details. `serviceUrl()` calls inspect and extracts the host port.
+**`PodmanDeploymentTarget`** (PODMAN): Update `deploy()` to pass port mappings — map container port 8080 to host port 0 (dynamic assignment). Add `containerInspect(String id)` to `PodmanClient` that calls `GET /containers/{id}/json` and extracts the assigned host port from `HostConfig.PortBindings`. `serviceUrl()` calls inspect and returns `http://localhost:<hostPort>`.
 
 ### Component 2: `ServiceHealthWaiter`
 
@@ -93,36 +111,35 @@ public final class ServiceHealthWaiter {
 }
 ```
 
-`ServiceProcess.waitForHealth()` should be refactored to delegate to this utility, keeping the process-alive check as the only difference.
+`ServiceProcess.waitForHealth()` should be refactored to delegate to `ServiceHealthWaiter`, keeping the process-alive check as the only difference.
 
-### Component 3: `healthPath` on `CaseHubApplicationSpec`
+### Component 3: `healthPath` on `DeployConfig`
 
-Add an optional `healthPath` field to `CaseHubApplicationSpec`:
+Add an optional `healthPath` field to `DeployConfig`:
 
 ```java
-public record CaseHubApplicationSpec(
+public record DeployConfig(
     String applicationId,
-    String source,
-    String image,
-    RuntimeConfig runtime,
-    Map<String, Object> config,
-    List<String> dependencies,
     int replicas,
+    Map<String, Object> config,
+    Map<String, String> env,
     String healthPath       // new — nullable, defaults to /q/health/ready
-) implements DeploymentNodeSpec { ... }
+) {
+    public DeployConfig {
+        config = config != null ? Map.copyOf(config) : Map.of();
+        env = env != null ? Map.copyOf(env) : Map.of();
+        if (healthPath == null || healthPath.isBlank()) healthPath = "/q/health/ready";
+    }
+
+    // Backwards-compatible constructor for existing callers
+    public DeployConfig(String applicationId, int replicas,
+                        Map<String, Object> config, Map<String, String> env) {
+        this(applicationId, replicas, config, env, null);
+    }
+}
 ```
 
-The compact constructor defaults `healthPath` to `/q/health/ready` when null or blank.
-
-Topology YAML example for a placeholder:
-```yaml
-manifest:
-  type: casehub_application
-  spec:
-    applicationId: manifest
-    image: nginx:alpine
-    healthPath: /
-```
+Keeping it on `DeployConfig` rather than `CaseHubApplicationSpec` avoids putting test metadata on a production domain type. `DeployConfig` is already the deployment-time configuration bag — health path is a deployment concern.
 
 ### Component 4: `HelloLlmMultiEnvTest` rewrite
 
@@ -135,32 +152,34 @@ void deploysTopologyViaTransitionPlanner() {
     DesiredStateGraph graph = compileGraph(...);
     ApplicationDeploymentTarget target = createTargetForEnv(env);
 
-    // Deploy all nodes (via transition planner — existing)
-    TransitionResult result = executeTransitions(graph, target);
+    try {
+        // Deploy all nodes (via transition planner — existing)
+        TransitionResult result = executeTransitions(graph, target);
 
-    // Unified assertion — same for all environments
-    for (DesiredNode node : graph.nodes().values()) {
-        CaseHubApplicationSpec spec = extractAppSpec(node);
-        Optional<String> url = target.serviceUrl(spec.applicationId());
-        assertThat(url).as("Service URL for %s", spec.applicationId()).isPresent();
+        // Unified assertion — same for all environments
+        for (DesiredNode node : graph.nodes().values()) {
+            CaseHubApplicationSpec spec = extractAppSpec(node);
+            Optional<String> url = target.serviceUrl(spec.applicationId());
+            assertThat(url).as("Service URL for %s", spec.applicationId()).isPresent();
 
-        String healthPath = spec.healthPath() != null ? spec.healthPath() : "/q/health/ready";
-        ServiceHealthWaiter.waitForReady(url.get(), healthPath, Duration.ofSeconds(60));
+            ServiceHealthWaiter.waitForReady(url.get(), spec.healthPath(),
+                    Duration.ofSeconds(60));
 
-        // Functional HTTP check — service responds
-        assertHttpOk(url.get() + healthPath);
+            assertHttpOk(url.get() + spec.healthPath());
+        }
+
+        // LOCAL-only bonus: in-JVM LLM exercise
+        if (env == TargetEnvironment.LOCAL) {
+            FleetLlmExerciser.exercise("my-llm", ...);
+        }
+    } finally {
+        undeploy(graph, target);
+        target.close();
     }
-
-    // LOCAL-only bonus: in-JVM LLM exercise
-    if (env == TargetEnvironment.LOCAL) {
-        FleetLlmExerciser.exercise("my-llm", ...);
-    }
-
-    undeploy(graph, target);
 }
 ```
 
-No environment branching in deploy/health/assert. The only `if` is the additive `FleetLlmExerciser` on LOCAL.
+No environment branching in deploy/health/assert. The only `if` is the additive `FleetLlmExerciser` on LOCAL. The `finally` block ensures port-forward cleanup even on assertion failure.
 
 ### Component 5: Podman port mapping
 
@@ -174,7 +193,7 @@ var request = new CreateContainerRequest(name, image, Map.of(), env);
 var request = new CreateContainerRequest(name, image, Map.of(8080, 0), env);
 ```
 
-Add `containerInspect(String id)` to `PodmanClient` — calls `GET /containers/{id}/json` and extracts `HostConfig.PortBindings` to find the assigned host port.
+Add `containerInspect(String id)` to `PodmanClient` — calls `GET /containers/{id}/json` and extracts the assigned host port from the port bindings response.
 
 `PodmanDeploymentTarget.serviceUrl()` calls inspect and returns `http://localhost:<hostPort>`.
 
@@ -183,9 +202,9 @@ Add `containerInspect(String id)` to `PodmanClient` — calls `GET /containers/{
 ### Unit tests
 
 - `ServiceHealthWaiterTest`: mock HTTP server, verify waits for 200, throws on timeout
-- `KubernetesDeploymentTargetTest`: verify `serviceUrl()` returns port-forwarded URL
+- `KubernetesDeploymentTargetTest`: verify `serviceUrl()` returns port-forwarded URL (mock fabric8 client)
 - `PodmanDeploymentTargetTest`: verify `serviceUrl()` returns inspected port URL
-- `CaseHubApplicationSpecTest`: verify `healthPath` defaults to `/q/health/ready`
+- `DeployConfigTest`: verify `healthPath` defaults to `/q/health/ready`
 
 ### Integration tests (integration-live)
 
@@ -194,21 +213,23 @@ Add `containerInspect(String id)` to `PodmanClient` — calls `GET /containers/{
 
 ## Trade-offs
 
-- **healthPath widens CaseHubApplicationSpec:** Adds a field to a core record. Justified because health checking is fundamental to deployment verification, and different services have different health endpoints.
-- **Port-forward complexity in K8S:** Adds background process management to `KubernetesDeploymentTarget`. Cleanup on undeploy is essential. Mitigated by tracking active port-forwards in a map.
-- **Podman dynamic ports:** Host port assignment means tests can't predict the port. Mitigated by `serviceUrl()` resolving it at runtime.
-- **FleetLlmExerciser remains LOCAL-only:** Accepted — it tests classpath routing, not service availability. The HTTP layer covers service availability uniformly.
+- **AutoCloseable on ApplicationDeploymentTarget:** Widens the interface contract. Justified because K8S port-forwards are stateful resources that need cleanup. Default `close()` is no-op — non-stateful targets are unaffected.
+- **healthPath on DeployConfig, not CaseHubApplicationSpec:** Keeps the domain type clean but means the topology YAML can't declare health paths directly — the test harness must map from spec to deploy config. Accepted because health path is a deployment/test concern, not a domain concern.
+- **LOCAL URL injection via registerServiceUrl():** Widens `ClaudonyDeploymentTarget` with a test-support method on a production class. Mitigated by making the method package-private or protected. The production CDI usage never calls it.
+- **FleetLlmExerciser remains LOCAL-only:** Descoped from issue #206's deliverable. It tests in-JVM classpath routing, which is fundamentally different from HTTP service availability. An HTTP-based exerciser for K8S/PODMAN is a separate concern.
+- **Port-forward complexity in K8S:** fabric8's `LocalPortForward` is well-tested API. Cleanup via `AutoCloseable.close()` is reliable. No shell exec needed.
 
 ## References
 
-- `api/.../ApplicationDeploymentTarget.java:5-24` — interface to extend with serviceUrl()
-- `api/.../CaseHubApplicationSpec.java:12-37` — record to extend with healthPath
+- `api/.../ApplicationDeploymentTarget.java:5-24` — interface to extend with serviceUrl() and AutoCloseable
+- `api/.../DeployConfig.java:1-17` — record to extend with healthPath
 - `api/.../HealthCheckResult.java:1-7` — existing health check contract
-- `claudony/.../ClaudonyDeploymentTarget.java:18-128` — LOCAL target, fleet URL known
-- `container/.../PodmanDeploymentTarget.java:14-75` — Podman target, no port mapping yet
-- `container/.../PodmanClient.java:105-124` — CreateContainerRequest with portMappings support
-- `topology-tests/.../KubernetesDeploymentTarget.java:20-117` — K8S target with imageOverride
+- `claudony/.../ClaudonyDeploymentTarget.java:18-128` — LOCAL target, fleet API metadata only
+- `container/.../PodmanDeploymentTarget.java:14-75` — Podman target, needs port mapping
+- `container/.../PodmanClient.java:105-124,185-189` — CreateContainerRequest with portMappings
+- `topology-tests/.../KubernetesDeploymentTarget.java:20-117` — K8S target, needs fabric8 portForward
 - `topology-tests/.../HelloLlmMultiEnvTest.java` — test to rewrite
 - `topology-tests/.../ServiceProcess.java:100-128` — waitForHealth() to extract
+- `topology-tests/.../ServiceClusterExtension.java:27-60` — manages ServiceProcess lifecycle, injects URLs
 - `topology-tests/.../FleetLlmExerciser.java` — in-JVM LLM exercise (LOCAL-only)
-- Decision review from #205 — R1-17 identified "local image store" ambiguity across environments
+- Design review `issue-206-service-url-20261027-005608` — R1-02 (proxy doesn't exist), R1-03 (fabric8 portForward), R1-08 (healthPath location)
