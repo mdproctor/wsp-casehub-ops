@@ -12,8 +12,4 @@ design-section-hashes:
 flyway-next-v: 
 
 ## Queue
-- [ ] casehubio/casehub-ops#212 — Issue #212 ← active
-  - [x] Batch 1: FleetAssertions
-    - [x] Task 1: Create FleetAssertions with tests
-  - [x] Batch 2: Migration
-    - [x] Task 2: Delete LlmAssertions and migrate all test imports
+- [x] casehubio/casehub-ops#212 — Issue #212
