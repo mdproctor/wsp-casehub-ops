@@ -13,3 +13,7 @@ flyway-next-v:
 
 ## Queue
 - [ ] casehubio/casehub-ops#212 — Issue #212 ← active
+  - [ ] Batch 1: FleetAssertions
+    - [ ] Task 1: Create FleetAssertions with tests
+  - [ ] Batch 2: Migration
+    - [ ] Task 2: Delete LlmAssertions and migrate all test imports
