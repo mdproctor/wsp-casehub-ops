@@ -1,0 +1,15 @@
+# Work Plan — issue-212-simplify-llm-assertions
+
+## State
+branch: issue-212-simplify-llm-assertions
+state: scaffolded
+project-sha: 
+date: 
+issue-repo: casehubio/casehub-ops
+covers: 212,213
+design-repo: 
+design-section-hashes: 
+flyway-next-v: 
+
+## Queue
+- [ ] casehubio/casehub-ops#212 — Issue #212 ← active
