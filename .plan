@@ -1,0 +1,15 @@
+# Work Plan — issue-200-retrofit-acceptance-tests
+
+## State
+branch: issue-200-retrofit-acceptance-tests
+state: scaffolded
+project-sha: 
+date: 
+issue-repo: casehubio/casehub-ops
+covers: 200
+design-repo: 
+design-section-hashes: 
+flyway-next-v: 
+
+## Queue
+- [ ] casehubio/casehub-ops#200 — Issue #200 ← active
