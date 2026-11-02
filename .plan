@@ -14,7 +14,7 @@ flyway-next-v:
 ## Queue
 - [ ] casehubio/casehub-ops#223 — Issue #223 ← active
   - [ ] Batch 1: Runtime module + Dockerfile
-    - [ ] Task 1: Create runtime module with pom.xml
+    - [x] Task 1: Create runtime module with pom.xml
     - [ ] Task 2: Add Dockerfile.jvm
   - [ ] Batch 2: ImageResolver + Level 01
     - [ ] Task 3: Add universal image to ImageResolver
