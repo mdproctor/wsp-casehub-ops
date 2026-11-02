@@ -19,5 +19,5 @@ flyway-next-v:
   - [x] Batch 2: ImageResolver + Level 01
     - [x] Task 3: Add universal image to ImageResolver
     - [x] Task 4: Rewrite Level 01 topology YAML
-  - [ ] Batch 3: Docs + verify
-    - [ ] Task 5: Update docs and verify full build
+  - [x] Batch 3: Docs + verify
+    - [x] Task 5: Update docs and verify full build
