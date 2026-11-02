@@ -51,7 +51,6 @@ runtime/
 | `casehub-desiredstate` | Desired-state runtime |
 | `casehub-desiredstate-yaml` | YAML goal frontend |
 | `casehub-desiredstate-work` | Work integration |
-| `casehub-neocortex` | Cognitive runtime (if available) |
 | `casehub-agency-summarisation-yaml` | Summarisation |
 
 **Compile-scope dependencies (ops stack):**
