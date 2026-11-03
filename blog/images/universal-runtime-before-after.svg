@@ -1,0 +1,71 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 720 440" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif">
+  <defs>
+    <marker id="arr" markerWidth="8" markerHeight="6" refX="8" refY="3" orient="auto">
+      <path d="M0,0 L8,3 L0,6" fill="#64748b"/>
+    </marker>
+  </defs>
+
+  <!-- Before section -->
+  <text x="180" y="28" text-anchor="middle" font-size="14" font-weight="600" fill="#475569">Before — four fictional images</text>
+
+  <!-- Before boxes -->
+  <rect x="20" y="50" width="120" height="56" rx="8" fill="#fee2e2" stroke="#dc2626" stroke-width="1.5" stroke-dasharray="5 3"/>
+  <text x="80" y="76" text-anchor="middle" font-size="12" font-weight="600" fill="#991b1b">manifest</text>
+  <text x="80" y="92" text-anchor="middle" font-size="9" fill="#dc2626">doesn't exist</text>
+
+  <rect x="155" y="50" width="120" height="56" rx="8" fill="#fee2e2" stroke="#dc2626" stroke-width="1.5" stroke-dasharray="5 3"/>
+  <text x="215" y="76" text-anchor="middle" font-size="12" font-weight="600" fill="#991b1b">eidos</text>
+  <text x="215" y="92" text-anchor="middle" font-size="9" fill="#dc2626">framework, not a service</text>
+
+  <rect x="20" y="120" width="120" height="56" rx="8" fill="#fee2e2" stroke="#dc2626" stroke-width="1.5" stroke-dasharray="5 3"/>
+  <text x="80" y="146" text-anchor="middle" font-size="12" font-weight="600" fill="#991b1b">engine</text>
+  <text x="80" y="162" text-anchor="middle" font-size="9" fill="#dc2626">runtime, not standalone</text>
+
+  <rect x="155" y="120" width="120" height="56" rx="8" fill="#fee2e2" stroke="#dc2626" stroke-width="1.5" stroke-dasharray="5 3"/>
+  <text x="215" y="146" text-anchor="middle" font-size="12" font-weight="600" fill="#991b1b">my-llm</text>
+  <text x="215" y="162" text-anchor="middle" font-size="9" fill="#dc2626">fictional app image</text>
+
+  <!-- Arrows between before boxes -->
+  <line x1="140" y1="78" x2="153" y2="78" stroke="#64748b" stroke-width="1" marker-end="url(#arr)"/>
+  <line x1="80" y1="106" x2="80" y2="118" stroke="#64748b" stroke-width="1" marker-end="url(#arr)"/>
+  <line x1="140" y1="148" x2="153" y2="148" stroke="#64748b" stroke-width="1" marker-end="url(#arr)"/>
+
+  <!-- Fallback annotation -->
+  <rect x="40" y="195" width="240" height="30" rx="6" fill="#fef9c3" stroke="#ca8a04" stroke-width="1"/>
+  <text x="160" y="215" text-anchor="middle" font-size="11" fill="#854d0e">fallback: nginx:alpine (zero CaseHub logic)</text>
+
+  <!-- Arrow -->
+  <text x="360" y="135" text-anchor="middle" font-size="28" fill="#64748b">→</text>
+
+  <!-- After section -->
+  <text x="560" y="28" text-anchor="middle" font-size="14" font-weight="600" fill="#475569">After — one real image</text>
+
+  <!-- After box -->
+  <rect x="460" y="60" width="200" height="100" rx="10" fill="#dcfce7" stroke="#16a34a" stroke-width="2"/>
+  <text x="560" y="96" text-anchor="middle" font-size="15" font-weight="700" fill="#14532d">my-llm</text>
+  <text x="560" y="116" text-anchor="middle" font-size="11" fill="#166534">casehub-runtime:latest</text>
+  <text x="560" y="136" text-anchor="middle" font-size="10" fill="#64748b">engine + eidos + work + platform</text>
+
+  <!-- Config annotation -->
+  <rect x="470" y="180" width="180" height="52" rx="6" fill="#f0fdf4" stroke="#16a34a" stroke-width="1"/>
+  <text x="560" y="200" text-anchor="middle" font-size="10" font-weight="500" fill="#166534">config:</text>
+  <text x="560" y="216" text-anchor="middle" font-size="10" fill="#64748b">llm.capability: fast</text>
+
+  <!-- Line from box to config -->
+  <line x1="560" y1="160" x2="560" y2="178" stroke="#16a34a" stroke-width="1" stroke-dasharray="3 2"/>
+
+  <!-- Bottom comparison -->
+  <rect x="20" y="260" width="330" height="80" rx="8" fill="#f8fafc" stroke="#cbd5e1" stroke-width="1"/>
+  <text x="185" y="284" text-anchor="middle" font-size="12" font-weight="600" fill="#334155">Old: 4 nodes, 0 real containers</text>
+  <text x="185" y="304" text-anchor="middle" font-size="11" fill="#64748b">Images that don't exist, deployed as nginx stubs.</text>
+  <text x="185" y="322" text-anchor="middle" font-size="11" fill="#64748b">Tests pass, but test nothing real.</text>
+
+  <rect x="370" y="260" width="330" height="80" rx="8" fill="#f0fdf4" stroke="#16a34a" stroke-width="1"/>
+  <text x="535" y="284" text-anchor="middle" font-size="12" font-weight="600" fill="#166534">New: 1 node, 1 real container</text>
+  <text x="535" y="304" text-anchor="middle" font-size="11" fill="#64748b">Full CaseHub platform in one image.</text>
+  <text x="535" y="322" text-anchor="middle" font-size="11" fill="#64748b">Health checks, REST API, JPA persistence.</text>
+
+  <!-- Bottom labels -->
+  <text x="185" y="370" text-anchor="middle" font-size="20" fill="#dc2626">✗</text>
+  <text x="535" y="370" text-anchor="middle" font-size="20" fill="#16a34a">✓</text>
+</svg>

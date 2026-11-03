@@ -1,0 +1,31 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 600 380" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif">
+  <!-- Container outline -->
+  <rect x="60" y="30" width="480" height="320" rx="12" fill="#f8fafc" stroke="#334155" stroke-width="2"/>
+  <text x="300" y="22" text-anchor="middle" font-size="13" font-weight="600" fill="#475569">casehubio/casehub-runtime:latest</text>
+
+  <!-- Alpine + JRE base -->
+  <rect x="80" y="280" width="440" height="50" rx="6" fill="#e2e8f0" stroke="#94a3b8" stroke-width="1"/>
+  <text x="300" y="310" text-anchor="middle" font-size="13" font-weight="500" fill="#334155">Alpine Linux + Eclipse Temurin 21 JRE</text>
+
+  <!-- Quarkus layer -->
+  <rect x="80" y="218" width="440" height="50" rx="6" fill="#dbeafe" stroke="#3b82f6" stroke-width="1"/>
+  <text x="300" y="248" text-anchor="middle" font-size="13" font-weight="500" fill="#1e3a5f">Quarkus 3.39 — REST, CDI, JPA, Health, GraphQL</text>
+
+  <!-- Platform modules -->
+  <rect x="80" y="136" width="210" height="70" rx="6" fill="#fef3c7" stroke="#d97706" stroke-width="1"/>
+  <text x="185" y="164" text-anchor="middle" font-size="12" font-weight="600" fill="#78350f">Platform Stack</text>
+  <text x="185" y="182" text-anchor="middle" font-size="10" fill="#92400e">engine · eidos · work · ledger</text>
+  <text x="185" y="194" text-anchor="middle" font-size="10" fill="#92400e">desiredstate · platform</text>
+
+  <!-- Ops service -->
+  <rect x="310" y="136" width="210" height="70" rx="6" fill="#e0f2fe" stroke="#0284c7" stroke-width="1"/>
+  <text x="415" y="164" text-anchor="middle" font-size="12" font-weight="600" fill="#0c4a6e">Ops Service Layer</text>
+  <text x="415" y="182" text-anchor="middle" font-size="10" fill="#075985">K8s lifecycle · REST API</text>
+  <text x="415" y="194" text-anchor="middle" font-size="10" fill="#075985">approvals · reconciliation</text>
+
+  <!-- Config overlay -->
+  <rect x="80" y="56" width="440" height="66" rx="6" fill="#f0fdf4" stroke="#16a34a" stroke-width="1.5"/>
+  <text x="300" y="78" text-anchor="middle" font-size="12" font-weight="600" fill="#166534">Runtime Configuration (env vars)</text>
+  <text x="300" y="98" text-anchor="middle" font-size="11" fill="#64748b">Same image, different personality — config controls behaviour</text>
+  <text x="300" y="113" text-anchor="middle" font-size="10" fill="#94a3b8">llm.capability=fast · QUARKUS_DATASOURCE_JDBC_URL=... · casehub.ops.*=...</text>
+</svg>
