@@ -14,8 +14,8 @@
   <!-- Platform modules -->
   <rect x="80" y="136" width="210" height="70" rx="6" fill="#fef3c7" stroke="#d97706" stroke-width="1"/>
   <text x="185" y="164" text-anchor="middle" font-size="12" font-weight="600" fill="#78350f">Platform Stack</text>
-  <text x="185" y="182" text-anchor="middle" font-size="10" fill="#92400e">engine · eidos · work · ledger</text>
-  <text x="185" y="194" text-anchor="middle" font-size="10" fill="#92400e">desiredstate · platform</text>
+  <text x="185" y="182" text-anchor="middle" font-size="10" fill="#92400e">engine · work · desiredstate</text>
+  <text x="185" y="194" text-anchor="middle" font-size="10" fill="#92400e">platform · eidos-api · qhorus-api</text>
 
   <!-- Ops service -->
   <rect x="310" y="136" width="210" height="70" rx="6" fill="#e0f2fe" stroke="#0284c7" stroke-width="1"/>

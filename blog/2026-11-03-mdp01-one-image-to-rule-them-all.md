@@ -33,7 +33,7 @@ That's four of everything for a hello world. And since none of it existed, the t
 
 ## One Image, All Modules
 
-The fix is a universal runtime image. One Quarkus application with every CaseHub platform module on the classpath. Engine, eidos, work, platform, desiredstate — all of it. Build once, push once, deploy everywhere with different configs.
+The fix is a universal runtime image. One Quarkus application with the CaseHub platform stack on the classpath — engine, work, platform, desiredstate — plus the ops service layer with its K8s lifecycle management, REST APIs, and reconciliation infrastructure. Build once, push once, deploy everywhere with different configs.
 
 ![The universal runtime image — layers from Alpine through Quarkus to config](images/universal-runtime-layers.svg)
 
