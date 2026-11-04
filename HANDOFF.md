@@ -1,45 +1,73 @@
-# Handoff — casehub-ops
+# Handoff
 
-## Active Work
+## Last Session — 2026-11-03/04
 
-**Branch:** `issue-207-multi-env-deploy-testing` (paused)
-**Epic:** #207 — Harden multi-environment deployment testing (LOCAL/K8S/PODMAN parity)
-**State:** design complete, implementation plan written, ready to execute
+Completed **#227** (Level 03 topology rewrite) and **#236** (qhorus runtime integration + e2e behavior test). Filed **#237** (templated e2e test dimensions).
 
-## What to Do
+### What was built
 
-`work resume` → then start executing the plan at `/Users/mdproctor/claude/public/casehub-ops/plans/2026-10-27-multi-env-deploy-testing.md`
+**#227** — Rewrote Level 03 topology from 7 fictional nodes to 3 real nodes (platform, ledger, qhorus) using the universal runtime image. Compilation tests (5), reconciliation tests (4), acceptance test updated. Landed as `6b50fc8` on main.
 
-Batches 1-2 and 4 can start immediately. Batch 3 is blocked on cross-repo prerequisites (platform#666, eidos#208).
+**#236** — Added qhorus modules (`casehub-qhorus` + `casehub-qhorus-persistence-memory`) to the universal runtime image. Fixed multi-persistence-unit CDI wiring. Wrote `QhorusPodmanE2eTest` — deploys a container via Podman and exercises real application logic: platform CRUD (create application, verify persistence) + qhorus channels (create channel, post COMMAND message, verify round-trip). Wrote `docs/guides/topology-levels-strategy.md` — the living strategy doc for levels, testing dimensions, and interactive tutorials. Landed as `52c49a7` on main.
 
-## Cross-Repo Issues Filed
+### Blog entries
 
-- **casehubio/platform#666** — `agent-rest` module: structured HTTP agent invocation endpoint + `AgentResolver` SPI. Prerequisite for ops #208.
-- **casehubio/eidos#208** — implement `AgentResolver` SPI using `SystemPromptRenderer`. Depends on platform#666.
+- `blog/2026-11-03-mdp01-one-image-to-rule-them-all.md` — universal runtime image (Level 01/02, from prior session)
+- `blog/2026-11-04-mdp01-the-test-is-the-tutorial.md` — test dimensions, runtime proof, tutorial vision
 
-## Architecture Decisions
+## Recommended Next Work
 
-1. **K8S/PODMAN deploy path**: direct `target.deploy()` (not TransitionPlanner). Runtime validated by reconciliation tests.
-2. **HTTP agent invocation**: platform `POST /api/agent/chat` with AgentResolver SPI (eidos implements).
-3. **ImageResolver**: context-based mutually exclusive tiers (LOCAL/REGISTRY/FALLBACK) — not a fallback chain.
-4. **Shared assertion contract**: `LlmResponse` + `LlmAssertions` migrate from topology-tests to testing/ module.
-5. **Production networking**: tiered — NodePort for test/dev, Ingress for production (deferred).
-6. **Sequencing**: #209 → platform#666 + eidos#208 → ops#208 → #210 → #211
+### 1. #237 — Templated e2e test dimensions (START HERE)
 
-## Plan Summary (6 tasks, 6 batches)
+Design and build the reusable dimension framework so each topology level declares which capabilities it tests. This is the foundation everything else depends on.
 
-1. **ImageResolver Enhancement** (#209) — `ImageSource` enum, context-based tiers
-2. **Shared Assertion Contract** (#208) — extract `LlmResponse` + `LlmAssertions` to testing/
-3. **HTTP Fleet Exerciser** (#208) — `HttpFleetExerciser` + wire into HelloLlmMultiEnvTest *(blocked on platform#666)*
-4. **K8S Target Consolidation** (#211) — move to deployment/, delete stub
-5. **NodePort Networking** (#211) — replace port-forwarding, K3d port mapping
-6. **CI Pipeline** (#210) — GitHub Actions dispatch workflow
+**Key artifacts:**
+- Strategy doc: `docs/guides/topology-levels-strategy.md` (read this first — has dimension contract, YAML descriptor format, and phase progression)
+- Reference test: `topology-tests/src/test/java/io/casehub/ops/topology/env/QhorusPodmanE2eTest.java` (Level 03 behavior test to extract dimensions from)
+- Reference test: `topology-tests/src/test/java/io/casehub/ops/topology/env/HelloLlmPodmanE2eTest.java` (Level 01 behavior test)
 
-## Key Files
+**What to build:**
+- `TestDimension` interface — name, requires, execute(urls, state)
+- `ServiceUrls` abstraction — target-agnostic URL provider (Podman, K8s, local)
+- Concrete dimensions: Deploy, Platform, LLM, Channels
+- Refactor QhorusPodmanE2eTest and HelloLlmPodmanE2eTest to use dimensions
 
-- `specs/issue-207-multi-env-deploy-testing/2026-10-27-multi-env-deploy-testing-design.md` — design spec
-- `specs/issue-207-multi-env-deploy-testing/decisions.md` — 6 captured decisions
-- `plans/2026-10-27-multi-env-deploy-testing.md` — implementation plan
-- `topology-tests/src/test/java/.../env/HelloLlmMultiEnvTest.java` — unified multi-env test
-- `topology-tests/src/test/java/.../integration/FleetLlmExerciser.java` — in-JVM exerciser
-- `testing/src/main/java/.../env/ImageResolver.java` — image resolution
+### 2. #228 — Level 04 topology (LLM Fleet)
+
+Next level in #226 epic. Adds the Fleet dimension (multiple LLM instances, per-instance routing). Follow the same pattern: YAML rewrite + compilation + reconciliation + e2e behavior test using the new dimension framework from #237.
+
+### 3. Strategy doc refinement
+
+`docs/guides/topology-levels-strategy.md` covers the four-phase arc:
+1. Java dimension tests (current) → 2. YAML descriptors → 3. Scaffold UI tutorials → 4. Continuous verification
+
+The YAML descriptor format and scaffold UI integration sections need design work once #237's dimension framework is built.
+
+## Epic Status: #226 — Rewrite all topology levels to universal runtime
+
+| # | Title | Status |
+|---|-------|--------|
+| #223 | Level 01: Hello LLM | Done |
+| #225 | Level 02: Accountability | Done |
+| #227 | Level 03: Case Management | Done |
+| #236 | Level 03: Qhorus runtime + e2e | Done |
+| #228 | Level 04: LLM Fleet | Open — next |
+| #229 | Level 05: Config Drift | Open |
+| #230 | Level 06: Lifecycle | Open |
+| #231 | Level 07: Topology Mutations | Open |
+| #232 | Level 08: Fleet Observability | Open |
+| #233 | Level 09: Chat UI | Open |
+| #234 | Levels 10, 12, 14: Claudony domain | Open |
+| #235 | Level 15: Governed Interaction | Open |
+
+## Related Issues
+
+- **#237** — Templated e2e test dimensions (foundational — do before more levels)
+- **#200** — Epic: Retrofit system-level acceptance tests across all topology levels (overlaps with #237)
+
+## Key Design Decisions
+
+- **Service boundaries by state independence** — co-locate what's coupled (engine+work+eidos+manifest → platform), separate what manages independent state (ledger = audit, qhorus = protocol/channels)
+- **Tests verify runtime behavior** — not just deployment. Every level must exercise application logic through REST APIs.
+- **Same tests become tutorials** — dimension framework → YAML descriptors → scaffold UI interactive tutorials with visual feedback
+- **Incremental module addition** — add dependencies to the universal runtime as each level needs them (qhorus added for Level 03, next modules for Level 04+)
