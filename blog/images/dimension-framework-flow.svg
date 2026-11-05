@@ -1,0 +1,54 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 720 340" font-family="system-ui, -apple-system, sans-serif">
+  <defs>
+    <marker id="arrow" markerWidth="8" markerHeight="6" refX="8" refY="3" orient="auto">
+      <path d="M0,0 L8,3 L0,6" fill="#475569"/>
+    </marker>
+    <marker id="arrow-red" markerWidth="8" markerHeight="6" refX="8" refY="3" orient="auto">
+      <path d="M0,0 L8,3 L0,6" fill="#dc2626"/>
+    </marker>
+  </defs>
+
+  <!-- Title -->
+  <text x="360" y="28" text-anchor="middle" font-size="15" font-weight="600" fill="#1e293b">Dimension Execution — Topological Sort + Cascade Failure</text>
+
+  <!-- Deploy box -->
+  <rect x="280" y="50" width="160" height="44" rx="6" fill="#dbeafe" stroke="#3b82f6" stroke-width="1.5"/>
+  <text x="360" y="77" text-anchor="middle" font-size="13" font-weight="500" fill="#1e40af">deploy</text>
+
+  <!-- Arrow from Deploy down, splits to Platform and LLM -->
+  <line x1="330" y1="94" x2="200" y2="145" stroke="#475569" stroke-width="1.5" marker-end="url(#arrow)"/>
+  <line x1="390" y1="94" x2="520" y2="145" stroke="#475569" stroke-width="1.5" marker-end="url(#arrow)"/>
+
+  <!-- Platform box -->
+  <rect x="120" y="148" width="160" height="44" rx="6" fill="#dbeafe" stroke="#3b82f6" stroke-width="1.5"/>
+  <text x="200" y="175" text-anchor="middle" font-size="13" font-weight="500" fill="#1e40af">platform</text>
+
+  <!-- LLM box -->
+  <rect x="440" y="148" width="160" height="44" rx="6" fill="#dbeafe" stroke="#3b82f6" stroke-width="1.5"/>
+  <text x="520" y="175" text-anchor="middle" font-size="13" font-weight="500" fill="#1e40af">llm</text>
+
+  <!-- Channels box -->
+  <rect x="280" y="148" width="160" height="44" rx="6" fill="#dbeafe" stroke="#3b82f6" stroke-width="1.5"/>
+  <text x="360" y="175" text-anchor="middle" font-size="13" font-weight="500" fill="#1e40af">channels</text>
+
+  <!-- Divider line -->
+  <line x1="40" y1="215" x2="680" y2="215" stroke="#e2e8f0" stroke-width="1" stroke-dasharray="4,4"/>
+  <text x="360" y="235" text-anchor="middle" font-size="11" fill="#94a3b8" font-style="italic">If deploy fails — cascade skip</text>
+
+  <!-- Failed Deploy box -->
+  <rect x="280" y="255" width="160" height="44" rx="6" fill="#fee2e2" stroke="#dc2626" stroke-width="1.5"/>
+  <text x="360" y="282" text-anchor="middle" font-size="13" font-weight="500" fill="#991b1b">deploy FAILED</text>
+
+  <!-- Skipped boxes -->
+  <rect x="80" y="255" width="120" height="44" rx="6" fill="#f1f5f9" stroke="#94a3b8" stroke-width="1" stroke-dasharray="3,3"/>
+  <text x="140" y="282" text-anchor="middle" font-size="12" fill="#94a3b8">platform</text>
+  <text x="140" y="295" text-anchor="middle" font-size="10" fill="#94a3b8">SKIPPED</text>
+
+  <rect x="460" y="255" width="120" height="44" rx="6" fill="#f1f5f9" stroke="#94a3b8" stroke-width="1" stroke-dasharray="3,3"/>
+  <text x="520" y="282" text-anchor="middle" font-size="12" fill="#94a3b8">channels</text>
+  <text x="520" y="295" text-anchor="middle" font-size="10" fill="#94a3b8">SKIPPED</text>
+
+  <!-- Red arrows for cascade -->
+  <line x1="320" y1="299" x2="200" y2="295" stroke="#dc2626" stroke-width="1.5" marker-end="url(#arrow-red)"/>
+  <line x1="400" y1="299" x2="460" y2="295" stroke="#dc2626" stroke-width="1.5" marker-end="url(#arrow-red)"/>
+</svg>

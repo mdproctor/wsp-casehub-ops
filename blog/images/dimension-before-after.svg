@@ -1,0 +1,45 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 720 320" font-family="system-ui, -apple-system, sans-serif">
+
+  <!-- Before panel -->
+  <rect x="20" y="10" width="320" height="300" rx="8" fill="#fff7ed" stroke="#f97316" stroke-width="1"/>
+  <text x="180" y="36" text-anchor="middle" font-size="14" font-weight="600" fill="#9a3412">Before — QhorusPodmanE2eTest</text>
+
+  <text x="40" y="62" font-size="11" fill="#78350f" font-family="monospace">class QhorusPodmanE2eTest {</text>
+  <text x="52" y="80" font-size="10" fill="#92400e" font-family="monospace">  static PodmanClient client;</text>
+  <text x="52" y="95" font-size="10" fill="#92400e" font-family="monospace">  static WebClient webClient;</text>
+  <text x="52" y="110" font-size="10" fill="#92400e" font-family="monospace">  static Vertx vertx;</text>
+  <text x="52" y="125" font-size="10" fill="#92400e" font-family="monospace">  static String serviceUrl;</text>
+  <text x="52" y="140" font-size="10" fill="#92400e" font-family="monospace">  static String containerId;</text>
+  <text x="52" y="155" font-size="10" fill="#92400e" font-family="monospace">  static String channelId;</text>
+  <text x="52" y="175" font-size="10" fill="#6b7280" font-family="monospace">  // 283 lines of setup,</text>
+  <text x="52" y="190" font-size="10" fill="#6b7280" font-family="monospace">  // container lifecycle,</text>
+  <text x="52" y="205" font-size="10" fill="#6b7280" font-family="monospace">  // HTTP calls, assertions,</text>
+  <text x="52" y="220" font-size="10" fill="#6b7280" font-family="monospace">  // teardown...</text>
+  <text x="52" y="245" font-size="10" fill="#92400e" font-family="monospace">  @Test @Order(1) deploy()</text>
+  <text x="52" y="258" font-size="10" fill="#92400e" font-family="monospace">  @Test @Order(2) health()</text>
+  <text x="52" y="271" font-size="10" fill="#92400e" font-family="monospace">  @Test @Order(3) createApp()</text>
+  <text x="52" y="284" font-size="10" fill="#92400e" font-family="monospace">  @Test @Order(4) createChan()</text>
+  <text x="52" y="297" font-size="10" fill="#92400e" font-family="monospace">  @Test @Order(5) postMsg()</text>
+  <text x="40" y="310" font-size="11" fill="#78350f" font-family="monospace">}</text>
+
+  <!-- After panel -->
+  <rect x="380" y="10" width="320" height="300" rx="8" fill="#f0fdf4" stroke="#22c55e" stroke-width="1"/>
+  <text x="540" y="36" text-anchor="middle" font-size="14" font-weight="600" fill="#166534">After — Level03DimensionTest</text>
+
+  <text x="400" y="62" font-size="11" fill="#14532d" font-family="monospace">@DimensionTest(</text>
+  <text x="412" y="80" font-size="10" fill="#166534" font-family="monospace">  containers = @ContainerSpec(</text>
+  <text x="412" y="95" font-size="10" fill="#166534" font-family="monospace">    name = "e2e-qhorus",</text>
+  <text x="412" y="110" font-size="10" fill="#166534" font-family="monospace">    image = "..runtime:latest",</text>
+  <text x="412" y="125" font-size="10" fill="#166534" font-family="monospace">    env = {"role=qhorus"}),</text>
+  <text x="412" y="145" font-size="10" fill="#166534" font-family="monospace">  dimensions = {</text>
+  <text x="412" y="160" font-size="10" fill="#166534" font-family="monospace">    DeployDimension.class,</text>
+  <text x="412" y="175" font-size="10" fill="#166534" font-family="monospace">    PlatformDimension.class,</text>
+  <text x="412" y="190" font-size="10" fill="#166534" font-family="monospace">    ChannelsDimension.class</text>
+  <text x="412" y="205" font-size="10" fill="#166534" font-family="monospace">  })</text>
+  <text x="400" y="225" font-size="11" fill="#14532d" font-family="monospace">class Level03DimensionTest {</text>
+  <text x="412" y="245" font-size="10" fill="#166534" font-family="monospace">  @TestTemplate</text>
+  <text x="412" y="260" font-size="10" fill="#166534" font-family="monospace">  void dimension() {}</text>
+  <text x="400" y="278" font-size="11" fill="#14532d" font-family="monospace">}</text>
+
+  <text x="540" y="300" text-anchor="middle" font-size="12" font-weight="500" fill="#166534">32 lines. All behaviour is reusable.</text>
+</svg>

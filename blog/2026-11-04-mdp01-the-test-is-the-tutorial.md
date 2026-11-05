@@ -5,13 +5,13 @@ date: 2026-11-04
 entry_type: note
 subtype: diary
 projects: [casehubio/casehub-ops]
-tags: [topology, testing, e2e, qhorus, channels, tutorial, desiredstate, architecture]
+tags: [topology, testing, e2e, dimensions, desiredstate, architecture, framework]
 series: issue-226-universal-runtime-rewrite
 ---
 
 # The Test Is the Tutorial
 
-The Level 03 topology rewrite started as a mechanical task: replace seven fictional container images with three real nodes using the universal runtime. It ended somewhere more interesting — with a test that creates an application, opens a channel, sends a message through it, and retrieves it. And with a question about what tests are actually for.
+The Level 03 topology rewrite started as a mechanical task: replace seven fictional container images with three real nodes using the universal runtime. It ended somewhere more interesting — with a test framework that proves a system works, teaches people how it works, and does both from the same source code.
 
 ## The Gap Nobody Noticed
 
@@ -19,25 +19,90 @@ The original Level 03 topology had seven nodes: manifest, eidos, engine, ledger,
 
 When the rewrite consolidated seven nodes to three — platform, ledger, qhorus — the natural question was: what do the tests actually prove now? The topology deploys. The reconciliation plan is correct. The audit trail covers the graph. But does the case management stack *work*?
 
-That question exposed a deeper gap. The qhorus node was declared as a "genuine service boundary" in the topology — it manages channels and protocol state independently. But when I looked at the runtime image, qhorus wasn't on the classpath. The `role: qhorus` config was metadata. The container had no qhorus functionality. The topology declared a boundary that didn't exist.
+That question exposed a deeper gap. The qhorus node was declared as a "genuine service boundary" in the topology — it manages channels and protocol state independently. But when I looked at the runtime image, qhorus wasn't on the classpath. The container had no qhorus functionality. The topology declared a boundary that didn't exist.
 
-## Closing the Gap
+## From Copy-Paste to Contract
 
-Adding qhorus to the universal runtime image was the obvious fix. Two Maven dependencies: `casehub-qhorus` (the Quarkus extension) and `casehub-qhorus-persistence-memory` (in-memory stores for dev). The build broke immediately — qhorus brings its own persistence unit, which conflicted with the existing datasource configuration. Standard Quarkus multi-persistence-unit wiring: configure a named datasource, assign entity packages, let CDI resolve.
+Adding qhorus to the runtime and writing the first multi-dimension e2e test (deploy, platform CRUD, channel round-trip) proved the concept. But it also revealed the problem with how the tests were structured.
 
-The interesting part wasn't the dependency plumbing. It was writing a test that proves the runtime actually does something.
+`QhorusPodmanE2eTest` was 283 lines. `HelloLlmPodmanE2eTest` was 198 lines. They shared 150 lines of identical boilerplate — Podman client setup, Vertx lifecycle, container creation via raw API calls, health-check polling, teardown. Every new topology level would copy this scaffold and add its own assertion methods. The test for Level 04 would duplicate everything from Level 03 plus its own fleet-scaling checks. By Level 08 the copy-paste chain would be unreadable.
 
-## What a Meaningful Test Looks Like
+The real problem was structural, not aesthetic. Each level *adds* capabilities — Level 03 has everything Level 02 has, plus channels. But the test code didn't reflect this. Each test was a monolith that re-implemented every capability check from scratch. There was no way to say "Level 03 is Level 02 plus channels" — you had to open both files and diff them manually to see what was different.
 
-The test deploys a single universal runtime container via Podman. Same image that runs in production. Same classpath. Then it makes HTTP calls that exercise real application logic:
+So I built a dimension framework.
 
-**Platform logic** — create an application called "incident-mgmt" via `/api/ops/applications`. Query it back. Verify the state persisted. This proves the platform's JPA layer, REST endpoints, and database are wired correctly. Not "the container started" but "I created a domain object and it's in the database."
+## What a Dimension Is
 
-**Qhorus logic** — create a channel called "incident-channel" with APPEND semantics via `/api/channels`. Post a COMMAND message: "create case for incident-2024-001." Retrieve the channel's messages. Verify the message arrived with the right sender, type, and content. This proves qhorus's channel mesh is active — channels persist, messages deliver, the round-trip works.
+A dimension is a reusable block of assertions that proves one capability works. It has a name, a set of dependencies on other dimensions, and an execute method that makes HTTP calls against a running service and verifies the results.
 
-![From YAML declaration to runtime proof — the test chain](images/l03-service-boundary-test.svg)
+```java
+public interface TestDimension {
+    String name();
+    Set<String> requires();
+    void execute(ServiceUrls urls, DimensionState state) throws Exception;
+}
+```
 
-The test doesn't deploy three separate containers and hope they talk to each other. It deploys one container with all modules on the classpath — because that's what the universal runtime *is*. The modules are separate at the code level (different packages, different persistence units, different REST resources) but coexist in one process. The test exercises them in sequence, building state that carries across modules: an application created through platform, a channel managed by qhorus for that application.
+No JUnit dependency. No test framework coupling. Pure Java contract. A dimension doesn't know how the container was deployed or what test runner invokes it. It knows how to exercise one capability and assert that it works.
+
+The four initial dimensions map directly to what the existing tests were already checking — just extracted into named, reusable pieces:
+
+- **deploy** — waits for the health endpoint, verifies the container is running. Requires nothing.
+- **platform** — creates an application via REST, queries it back, verifies persistence. Requires deploy.
+- **channels** — creates a channel, posts a message, retrieves it. Proves the round-trip. Requires deploy.
+- **llm** — submits a prompt, validates the response structure. Requires deploy.
+
+Each dimension reads shared state from prior dimensions (the service URL that deploy discovered, the application ID that platform created) and writes its own outputs for downstream use. The state flows through a simple string-keyed map — no compile-time coupling between dimensions, no type hierarchy to maintain.
+
+## Dependency Order, Not Test Order
+
+The old tests used `@Order` annotations to force sequential execution. Order 1 deploys, Order 2 checks health, Order 3 creates an app, Order 4 creates a channel. The ordering was implicit in the annotation values — if you removed a test or reordered them, everything broke silently.
+
+The dimension framework replaces this with topological sorting. Each dimension declares what it `requires()`. The framework builds the dependency graph and runs dimensions in the correct order. Same-depth dimensions (platform and llm both require only deploy) run in alphabetical order for determinism.
+
+![Dimension execution with topological sort and cascade failure](images/dimension-framework-flow.svg)
+
+If a dimension fails, every dimension that transitively depends on it is skipped — not failed, skipped. Independent dimensions still run. If deploy fails, platform and channels are skipped but the failure message tells you exactly why: "Skipped: dependency 'deploy' failed." If platform fails but channels only requires deploy, channels still executes. The dependency graph determines what gets skipped, not the test order.
+
+## What the Test Looks Like Now
+
+This is the complete Level 03 test:
+
+```java
+@DimensionTest(
+    containers = @ContainerSpec(
+        name = "e2e-qhorus",
+        image = "localhost/casehubio/casehub-runtime:latest",
+        env = {"role=qhorus"}),
+    dimensions = {DeployDimension.class, PlatformDimension.class,
+                  ChannelsDimension.class}
+)
+@Tag("integration-live")
+class Level03DimensionTest {
+
+    static ApplicationDeploymentTarget createTarget() {
+        return TargetEnvironmentFactory.createTarget(
+            TargetEnvironment.current(), Map.of());
+    }
+
+    @TestTemplate
+    void dimension() {}
+}
+```
+
+![Before and after — 283 lines to 32](images/dimension-before-after.svg)
+
+Thirty-two lines. The test class is pure declaration: which container to deploy, which dimensions to exercise. All behaviour lives in the dimensions — reusable across every level.
+
+Level 01 is identical except for the container name and the dimension list: `{DeployDimension.class, PlatformDimension.class, LlmDimension.class}`. Level 04 will add `FleetDimension.class`. Level 06 will add `LifecycleDimension.class`. Each level is a one-line change to the dimension list.
+
+## Why This Matters Beyond Clean Code
+
+The dimension framework isn't just about removing duplication. It changes what the test suite communicates.
+
+When someone opens `Level03DimensionTest`, they see instantly what Level 03 proves: deploy, platform, channels. They don't need to read 283 lines to understand that. When someone opens `Level06DimensionTest`, they'll see everything Level 03 proves *plus* lifecycle management. The test declaration IS the capability inventory for that level.
+
+This matters for the tutorial vision. The strategy document describes a four-phase arc: Java dimension tests (now), YAML descriptors (next), scaffold UI integration (after that), continuous verification (the endgame). The `TestDimension` interface was designed with zero JUnit dependency specifically because a YAML runner needs to invoke the same dimension logic without being a JUnit extension. The Java tests are Phase 1. When the YAML runner arrives, it becomes a second caller of the same dimension implementations. Nothing changes in the dimensions themselves.
 
 ## Why This Matters More Than Architecture Diagrams
 
@@ -47,26 +112,7 @@ Topology levels are the running version of the architecture diagram. Level 01 pr
 
 Each level is a statement about the system's capabilities, executable as a test. If the test passes, the statement is true. If it fails, the statement is false. There is no gap between the documentation and the reality because the documentation *is* the reality.
 
-## The Path to Interactive Tutorials
-
-This is where the vision gets practical. The same tests that prove the system works can teach people how it works. The sequence — deploy topology, create application, open channel, send message, verify — is already a tutorial in test form. Each step has a clear input (HTTP request), a clear output (response with state), and a clear lesson (what the system does and why).
-
-The next step is extracting these test dimensions into YAML descriptors:
-
-```yaml
-level: 03
-dimensions:
-  - deploy
-  - platform:
-      create: { path: /api/ops/applications, body: { name: incident-mgmt } }
-      verify: { path: /api/ops/applications, expect: { body_contains: incident-mgmt } }
-  - channels:
-      create: { path: /api/channels, body: { name: incident-channel, semantic: APPEND } }
-      message: { path: /api/channels/{id}/messages, body: { sender: platform, type: COMMAND } }
-      verify: { path: /api/channels/{id}/messages, expect: { body_contains: create case } }
-```
-
-The YAML descriptor runs in CI as a regression test. The same descriptor loads into the scaffold UI as an interactive tutorial — the user clicks "Run," sees the HTTP request and response, and gets a checkmark when it passes. The test is the tutorial. The tutorial is the test. One source of truth, two audiences.
+The dimension framework makes this explicit. The test doesn't just pass or fail as a monolith — it passes or fails per capability. Platform CRUD works. Channel round-trip works. LLM response well-formed. Each dimension is a specific claim about the system, individually verifiable.
 
 ## What Each Level Teaches
 
@@ -88,4 +134,4 @@ The seven-node topology looked impressive. Seven services, each with its own ima
 
 The three-node topology looks simpler. Three nodes, one real image. But it proves more. Each node exists for a reason: platform co-locates the tightly coupled modules, ledger isolates the audit trail, qhorus manages independent protocol state. And the test proves all three work — not as containers that start, but as services that serve.
 
-Sometimes less architecture proves more system.
+Sometimes less architecture proves more system. And sometimes the best documentation is a test that runs.
