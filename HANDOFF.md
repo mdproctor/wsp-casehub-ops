@@ -1,20 +1,15 @@
-# Handoff
+# HANDOFF — casehub-ops
 
-## Session Summary
+## Last Session
 
-Completed **#229** — Level 05 topology — config drift with universal runtime
-Branch: `issue-229-level05-config-drift-runtime`
-Date: 2026-11-05
+Rewrote Levels 05–09 to universal runtime (#229, #230, #231, #232, #233). All deployment-domain levels now use `casehubio/casehub-runtime:latest` with role-based config. Level 08 was silently using `claudony_app` node type — fixed to `casehub_application`. Level 09 collapsed 7 fictional nodes to 4 real service boundaries (platform, ledger, qhorus, chat-viewer). Blog entry written: "Config, Not Code."
 
-## Epic Status: #226 — Epic: Rewrite all topology levels to use universal runtime image
+## Immediate Next Step
 
-Progress: 2/2
+Remaining epic #226 levels: #234 (Levels 10, 12, 14 — claudony domain) and #235 (Level 15 — governed interaction). These use different SPI node types (`claudony_app`, `claudony_pool`, `channel`) and need separate design decisions — not a mechanical rewrite.
 
-| # | Title | Status |
-|---|-------|--------|
-| #223 | Level 01: Hello LLM | ✅ Done |
-| #225 | Level 02: Accountability | ✅ Done |
+## References
 
-### Epic Complete ✅
-
-All 2 issues in #226 are done.
+- Blog: `blog/2026-11-05-mdp01-config-not-code.md`
+- Prior entries: `blog/2026-11-03-mdp01-one-image-to-rule-them-all.md`, `blog/2026-11-04-mdp01-the-test-is-the-tutorial.md`
+- Strategy doc: `docs/guides/topology-levels-strategy.md`
