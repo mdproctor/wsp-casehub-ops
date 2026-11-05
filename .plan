@@ -1,0 +1,15 @@
+# Work Plan — issue-229-level05-config-drift-runtime
+
+## State
+branch: issue-229-level05-config-drift-runtime
+state: scaffolded
+project-sha: 
+date: 
+issue-repo: casehubio/casehub-ops
+covers: 229
+design-repo: 
+design-section-hashes: 
+flyway-next-v: 
+
+## Queue
+- [ ] casehubio/casehub-ops#229 — Issue #229 ← active
